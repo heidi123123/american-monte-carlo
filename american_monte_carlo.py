@@ -33,11 +33,19 @@ def call_payoff(S, K):
     return np.maximum(S - K, 0)
 
 
-# Perform Least-Squares Monte Carlo (LSMC) to estimate option price
-def LSMC_option_price(paths, K, r, dt, n_exercise_dates):
+# Generalized LSMC for European, Bermudan, and American options
+def LSMC_option_price(paths, K, r, dt, option_type="European", n_exercise_dates=4):
     n_paths, n_steps = paths.shape
     n_steps -= 1  # Adjust for the initial price at time 0
-    exercise_dates = np.linspace(0, n_steps, n_exercise_dates + 1, dtype=int)[1:]  # Exclude time 0
+
+    # Set exercise dates based on option type
+    if option_type == "European":
+        exercise_dates = [n_steps]  # Only at maturity
+    elif option_type == "Bermudan":
+        exercise_dates = np.linspace(0, n_steps, n_exercise_dates + 1, dtype=int)[1:]  # Exclude time 0
+    elif option_type == "American":
+        exercise_dates = np.arange(1, n_steps + 1)  # Every time step from 1 to n_steps
+
     cash_flows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_steps)
 
@@ -45,7 +53,8 @@ def LSMC_option_price(paths, K, r, dt, n_exercise_dates):
     for t in reversed(exercise_dates):
         in_the_money = call_payoff(paths[:, t], K) > 0  # ITM = exercise yes or no
         X = paths[in_the_money, t]  # stock prices for the ITM paths at time t
-        Y = cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))  # discounted ITM-CFs at time t
+        Y = cash_flows[in_the_money] * np.exp(
+            -r * dt * (exercise_times[in_the_money] - t))  # discounted ITM-CFs at time t
 
         if len(X) > 0:
             # Polynomial basis functions up to x^3 for regression to estimate continuation values for X
@@ -146,12 +155,17 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates=1, exercis
 # Generate asset price paths
 paths = generate_asset_paths(S0, r, sigma, T, n_steps, n_paths)
 
-# Calculate option prices using LSMC and Nested Monte Carlo
-lsmc_price = LSMC_option_price(paths, K, r, dt, n_exercise_dates)
+# Calculate option prices using LSMC for European, Bermudan, and American styles
+lsmc_european_price = LSMC_option_price(paths, K, r, dt, option_type="European")
+lsmc_bermudan_price = LSMC_option_price(paths, K, r, dt, option_type="Bermudan", n_exercise_dates=4)
+lsmc_american_price = LSMC_option_price(paths, K, r, dt, option_type="American")
+
+print(f"European Option Price (LSMC): {lsmc_european_price:.4f}")
+print(f"Bermudan Option Price (LSMC): {lsmc_bermudan_price:.4f}")
+print(f"American Option Price (LSMC): {lsmc_american_price:.4f}")
+
 nested_mc_price = nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inner=100,
                                          n_exercise_dates=n_exercise_dates)
-
-print(f"LSMC Price: {lsmc_price:.4f}")
 print(f"Nested MC Price: {nested_mc_price:.4f}")
 
 
