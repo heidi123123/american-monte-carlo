@@ -89,6 +89,60 @@ def nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inner, n_exercise_
     return option_price
 
 
+# Generate QuantLib object for comparison
+def get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates=1, exercise_style="American"):
+    # QuantLib Setup
+    calendar = ql.NullCalendar()
+    day_count = ql.Actual365Fixed()
+    today = ql.Date().todaysDate()
+    ql.Settings.instance().evaluationDate = today
+
+    # Exercise and engine setup functions
+    def european_exercise_and_engine():
+        exercise = ql.EuropeanExercise(today + int(T * 365))
+        engine = ql.AnalyticEuropeanEngine(process)
+        return exercise, engine
+
+    def bermudan_exercise_and_engine():
+        exercise_dates = [today + int(t * 365 * T / n_steps)
+                          for t in np.linspace(1, n_steps, n_exercise_dates, dtype=int)]
+        exercise = ql.BermudanExercise(exercise_dates)
+        engine = ql.BinomialVanillaEngine(process, "crr", n_steps)
+        return exercise, engine
+
+    def american_exercise_and_engine():
+        exercise = ql.AmericanExercise(today, today + int(T * 365))
+        engine = ql.BinomialVanillaEngine(process, "crr", n_steps)
+        return exercise, engine
+
+    # Map exercise styles to their respective exercise and engine functions
+    exercise_map = {
+        "European": european_exercise_and_engine,
+        "Bermudan": bermudan_exercise_and_engine,
+        "American": american_exercise_and_engine
+    }
+
+    # Market data
+    spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
+    flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(today, r, day_count))
+    vol_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(today, calendar, sigma, day_count))
+
+    # Black-Scholes process
+    process = ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
+
+    # Retrieve the selected exercise and engine
+    exercise, engine = exercise_map.get(exercise_style, american_exercise_and_engine)()
+
+    # Payoff
+    payoff = ql.PlainVanillaPayoff(ql.Option.Call, K)
+
+    # Construct the option
+    option = ql.VanillaOption(payoff, exercise)
+    option.setPricingEngine(engine)
+
+    return option
+
+
 # Generate asset price paths
 paths = generate_asset_paths(S0, r, sigma, T, n_steps, n_paths)
 
@@ -99,3 +153,16 @@ nested_mc_price = nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inne
 
 print(f"LSMC Price: {lsmc_price:.4f}")
 print(f"Nested MC Price: {nested_mc_price:.4f}")
+
+
+# European option
+ql_option_european = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="European")
+print(f"European Option Price (QuantLib): {ql_option_european.NPV():.4f}")
+
+# Bermudan option
+ql_option_bermudan = get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates, exercise_style="Bermudan")
+print(f"Bermudan Option Price (QuantLib): {ql_option_bermudan.NPV():.4f}")
+
+# American option
+ql_option_american = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="American")
+print(f"American Option Price (QuantLib): {ql_option_american.NPV():.4f}")
