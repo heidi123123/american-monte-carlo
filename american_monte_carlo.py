@@ -28,8 +28,8 @@ def generate_asset_paths(S0, r, sigma, T, n_steps, n_paths):
     return paths
 
 
-# Calculate payoff for a Bermudan call option
-def bermudan_payoff(S, K):
+# Calculate payoff for a call option
+def call_payoff(S, K):
     return np.maximum(S - K, 0)
 
 
@@ -43,7 +43,7 @@ def LSMC_option_price(paths, K, r, dt, n_exercise_dates):
 
     # Backward iteration: from the last exercise date backwards
     for t in reversed(exercise_dates):
-        in_the_money = bermudan_payoff(paths[:, t], K) > 0  # ITM = exercise yes or no
+        in_the_money = call_payoff(paths[:, t], K) > 0  # ITM = exercise yes or no
         X = paths[in_the_money, t]  # stock prices for the ITM paths at time t
         Y = cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))  # discounted ITM-CFs at time t
 
@@ -52,7 +52,7 @@ def LSMC_option_price(paths, K, r, dt, n_exercise_dates):
             A = np.vstack([np.ones_like(X), X, X ** 2, X ** 3]).T  # basis functions
             coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]  # least squares coefficients fitting Y against X
             continuation_estimated = A @ coeffs
-            exercise_value = bermudan_payoff(X, K)
+            exercise_value = call_payoff(X, K)
             exercise = exercise_value > continuation_estimated  # exercise or hold
             idx = np.where(in_the_money)[0][exercise]  # path index with optimal early exercise
             cash_flows[idx] = exercise_value[exercise]
@@ -74,11 +74,11 @@ def nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inner, n_exercise_
     for t in reversed(exercise_dates):
         for i in range(n_paths):
             S = paths[i, t]
-            exercise_value = bermudan_payoff(S, K)
+            exercise_value = call_payoff(S, K)
             if exercise_value > 0:
                 # Inner simulation for continuation value
                 inner_paths = generate_asset_paths(S, r, sigma, dt * (n_steps - t), n_steps - t, n_paths_inner)
-                inner_payoffs = bermudan_payoff(inner_paths[:, -1], K)
+                inner_payoffs = call_payoff(inner_paths[:, -1], K)
                 continuation_value = np.mean(inner_payoffs) * np.exp(-r * dt * (n_steps - t))
                 # Decide whether to exercise or continue
                 if exercise_value > continuation_value:
