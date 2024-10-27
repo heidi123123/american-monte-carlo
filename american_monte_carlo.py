@@ -72,32 +72,6 @@ def LSMC_option_price(paths, K, r, dt, option_type="European", n_exercise_dates=
     return option_price
 
 
-# Nested Monte Carlo (inefficient, just for comparison)
-def nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inner, n_exercise_dates):
-    n_paths, n_steps = paths.shape
-    n_steps -= 1  # Adjust for the initial price at time 0
-    exercise_dates = np.linspace(0, n_steps, n_exercise_dates + 1, dtype=int)[1:]  # Exclude time 0
-    cash_flows = np.zeros(n_paths)
-    exercise_times = np.full(n_paths, n_steps)
-
-    for t in reversed(exercise_dates):
-        for i in range(n_paths):
-            S = paths[i, t]
-            exercise_value = call_payoff(S, K)
-            if exercise_value > 0:
-                # Inner simulation for continuation value
-                inner_paths = generate_asset_paths(S, r, sigma, dt * (n_steps - t), n_steps - t, n_paths_inner)
-                inner_payoffs = call_payoff(inner_paths[:, -1], K)
-                continuation_value = np.mean(inner_payoffs) * np.exp(-r * dt * (n_steps - t))
-                # Decide whether to exercise or continue
-                if exercise_value > continuation_value:
-                    cash_flows[i] = exercise_value
-                    exercise_times[i] = t
-    # Discount cash flows back to present
-    option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
-    return option_price
-
-
 # Generate QuantLib object for comparison
 def get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates=1, exercise_style="American"):
     # QuantLib Setup
@@ -163,11 +137,6 @@ lsmc_american_price = LSMC_option_price(paths, K, r, dt, option_type="American")
 print(f"European Option Price (LSMC): {lsmc_european_price:.4f}")
 print(f"Bermudan Option Price (LSMC): {lsmc_bermudan_price:.4f}")
 print(f"American Option Price (LSMC): {lsmc_american_price:.4f}")
-
-nested_mc_price = nested_mc_option_price(paths, K, r, sigma, T, dt, n_paths_inner=100,
-                                         n_exercise_dates=n_exercise_dates)
-print(f"Nested MC Price: {nested_mc_price:.4f}")
-
 
 # European option
 ql_option_european = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="European")
