@@ -34,7 +34,7 @@ def call_payoff(S, K):
 
 
 # Generalized LSMC for European, Bermudan, and American options
-def LSMC_option_price(paths, K, r, dt, option_type="European", n_exercise_dates=4):
+def LSMC_option_price(paths, K, r, dt, option_type="European", n_exercise_dates=1):
     n_paths, n_steps = paths.shape
     n_steps -= 1  # Adjust for the initial price at time 0
 
@@ -73,7 +73,7 @@ def LSMC_option_price(paths, K, r, dt, option_type="European", n_exercise_dates=
 
 
 # Generate QuantLib object for comparison
-def get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates=1, exercise_style="American"):
+def get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="European", n_exercise_dates=1):
     # QuantLib Setup
     calendar = ql.NullCalendar()
     day_count = ql.Actual365Fixed()
@@ -129,23 +129,18 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates=1, exercis
 # Generate asset price paths
 paths = generate_asset_paths(S0, r, sigma, T, n_steps, n_paths)
 
-# Calculate option prices using LSMC for European, Bermudan, and American styles
+# LSMC option prices
 lsmc_european_price = LSMC_option_price(paths, K, r, dt, option_type="European")
 lsmc_bermudan_price = LSMC_option_price(paths, K, r, dt, option_type="Bermudan", n_exercise_dates=4)
 lsmc_american_price = LSMC_option_price(paths, K, r, dt, option_type="American")
-
 print(f"European Option Price (LSMC): {lsmc_european_price:.4f}")
 print(f"Bermudan Option Price (LSMC): {lsmc_bermudan_price:.4f}")
 print(f"American Option Price (LSMC): {lsmc_american_price:.4f}")
 
-# European option
+# QuantLib option prices
 ql_option_european = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="European")
-print(f"European Option Price (QuantLib): {ql_option_european.NPV():.4f}")
-
-# Bermudan option
-ql_option_bermudan = get_quantlib_option(S0, K, r, T, sigma, n_steps, n_exercise_dates, exercise_style="Bermudan")
-print(f"Bermudan Option Price (QuantLib): {ql_option_bermudan.NPV():.4f}")
-
-# American option
+ql_option_bermudan = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="Bermudan", n_exercise_dates=4)
 ql_option_american = get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="American")
+print(f"European Option Price (QuantLib): {ql_option_european.NPV():.4f}")
+print(f"Bermudan Option Price (QuantLib): {ql_option_bermudan.NPV():.4f}")
 print(f"American Option Price (QuantLib): {ql_option_american.NPV():.4f}")
