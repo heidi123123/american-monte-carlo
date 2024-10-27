@@ -126,10 +126,8 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_style="European", 
     return option
 
 
-# Generate asset price paths
-paths = generate_asset_paths(S0, r, sigma, T, n_steps, n_paths)
-
 # LSMC option prices
+paths = generate_asset_paths(S0, r, sigma, T, n_steps, n_paths)
 lsmc_european_price = LSMC_option_price(paths, K, r, dt, option_type="European")
 lsmc_bermudan_price = LSMC_option_price(paths, K, r, dt, option_type="Bermudan", n_exercise_dates=4)
 lsmc_american_price = LSMC_option_price(paths, K, r, dt, option_type="American")
