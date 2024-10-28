@@ -23,102 +23,6 @@ n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
 plot = True
 
 
-# Generate asset price paths using Geometric Brownian Motion (GBM)
-def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
-    dt = T / n_time_steps
-    paths = np.zeros((n_paths, n_time_steps + 1))
-    paths[:, 0] = S0
-    for t in range(1, n_time_steps + 1):
-        Z = np.random.normal(0, 1, n_paths)
-        paths[:, t] = paths[:, t - 1] * np.exp((r - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * Z)
-    return paths
-
-
-# Calculate payoff for a call option
-def call_payoff(S, K):
-    return np.maximum(S - K, 0)
-
-
-# Generalized LSMC with a triangular grid for backward iteration
-def lsmc_option_price_with_visualization(paths, K, r, dt, exercise_type="European", n_exercise_dates=1):
-    n_paths, n_time_steps = paths.shape
-    n_time_steps -= 1  # Adjust for the initial price at time 0
-
-    # Set exercise dates independently from time steps
-    if exercise_type == "European":
-        exercise_dates = [n_time_steps]  # Only at the final time step
-    elif exercise_type == "Bermudan":
-        exercise_dates = np.linspace(0, n_time_steps, n_exercise_dates + 1, dtype=int)[1:]  # Exclude time 0
-    elif exercise_type == "American":
-        exercise_dates = np.arange(1, n_time_steps + 1)  # Every time step from 1 to n_time_steps
-
-    cash_flows = np.zeros(n_paths)
-    exercise_times = np.full(n_paths, n_time_steps)
-
-    # Store option prices for each path and time step in a triangular structure
-    option_values_triangle = []
-
-    # Backward iteration through time steps
-    for t in reversed(range(n_time_steps + 1)):
-        if t == n_time_steps:  # Last time step (expiry)
-            cash_flows = call_payoff(paths[:, t], K)
-            exercise_times = np.full(n_paths, t)
-            option_values_triangle.append((t, paths[:, t], cash_flows))
-        else:
-            in_the_money = call_payoff(paths[:, t], K) > 0
-            X = paths[in_the_money, t]
-            Y = cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
-
-            if len(X) > 0:
-                # Polynomial basis functions up to x^3 for regression to estimate continuation values for X
-                A = np.vstack([np.ones_like(X), X, X ** 2, X ** 3]).T
-                coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]
-                continuation_estimated = A @ coeffs
-                exercise_value = call_payoff(X, K)
-                exercise = exercise_value > continuation_estimated
-                idx = np.where(in_the_money)[0][exercise]
-                cash_flows[idx] = exercise_value[exercise]
-                exercise_times[idx] = t
-
-            option_values_triangle.append((t, paths[:, t], cash_flows))
-
-    # Discount cash flows back to present
-    option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
-    option_values_triangle.reverse()  # To go from t=0 to t=n_time_steps for plotting
-    return option_price, option_values_triangle
-
-
-# Function to plot the LSMC triangle grid for backward iteration visualization
-def plot_lsmc_triangle(option_values_triangle, dt):
-    fig, ax = plt.subplots(figsize=(12, 8))
-
-    # Set up color map based on option values
-    all_option_values = np.concatenate([values for _, _, values in option_values_triangle])
-    norm = mcolors.Normalize(vmin=np.min(all_option_values), vmax=np.max(all_option_values))
-    cmap = cm.viridis
-
-    # Plot the option values in a triangular shape
-    for t, stock_prices, option_values in option_values_triangle:
-        T_step = t * dt
-        sc = ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=10, marker='o',
-                        norm=norm)
-        for i, (S, V) in enumerate(zip(stock_prices, option_values)):
-            ax.text(T_step, S, f"{V:.2f}", ha='center', va='center', fontsize=6,
-                    color="white", bbox=dict(facecolor="black", alpha=0.6, edgecolor="none"))
-
-    # Set title and axis labels with padding
-    ax.set_title("LSMC Backward Iteration Visualization (Triangle Structure)", pad=20)
-    ax.set_xlabel("Time to Maturity (T)", labelpad=15)
-    ax.set_ylabel("Stock Price (S)", labelpad=15)
-
-    # Add colorbar based on the ScalarMappable created
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array(all_option_values)
-    fig.colorbar(sm, ax=ax, label="Option Value")
-
-    plt.show()
-
-
 # Generate QuantLib object for comparison
 def get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_type="European", n_exercise_dates=1):
     # QuantLib Setup
@@ -173,14 +77,152 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, exercise_type="European", n
     return option
 
 
+# Generate asset price paths using Geometric Brownian Motion (GBM)
+def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
+    dt = T / n_time_steps
+    paths = np.zeros((n_paths, n_time_steps + 1))
+    paths[:, 0] = S0
+    for t in range(1, n_time_steps + 1):
+        Z = np.random.normal(0, 1, n_paths)
+        paths[:, t] = paths[:, t - 1] * np.exp((r - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * Z)
+    return paths
+
+
+# Calculate payoff for a call option
+def call_payoff(S, K):
+    return np.maximum(S - K, 0)
+
+
+def lsmc_option_price_with_visualization(paths, K, r, dt, exercise_type="European", n_exercise_dates=1):
+    n_paths, n_time_steps = paths.shape
+    n_time_steps -= 1  # Adjust for initial price at time 0
+    cash_flows = np.zeros(n_paths)
+    exercise_times = np.full(n_paths, n_time_steps)
+
+    # Set exercise dates based on exercise type
+    if exercise_type == "European":
+        exercise_dates = [n_time_steps]  # Only at expiration
+    elif exercise_type == "Bermudan":
+        exercise_dates = np.linspace(0, n_time_steps, n_exercise_dates + 1, dtype=int)[1:]  # Exclude time 0
+    elif exercise_type == "American":
+        exercise_dates = np.arange(1, n_time_steps + 1)  # Every time step from 1 to n_time_steps
+
+    # For storing option values and continuation values for visualization
+    option_values_triangle = []
+    continuation_values_triangle = []
+
+    # Backward iteration through time steps
+    for t in reversed(range(n_time_steps + 1)):
+        if t == n_time_steps:  # At expiration, option value is intrinsic value
+            cash_flows = call_payoff(paths[:, t], K)
+            exercise_times = np.full(n_paths, t)
+            option_values_triangle.append((t, paths[:, t], cash_flows))
+            continuation_values_triangle.append((t, paths[:, t], cash_flows))
+        elif t in exercise_dates:
+            # In-the-money paths where exercise might be considered
+            in_the_money = call_payoff(paths[:, t], K) > 0
+            X = paths[in_the_money, t]
+            Y = cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
+
+            if len(X) > 0:
+                # Regression to estimate continuation value
+                A = np.vstack([np.ones_like(X), X, X ** 2, X ** 3]).T
+                coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]
+                continuation_estimated = A @ coeffs
+
+                # Determine option values based on exercise vs. continuation
+                exercise_value = call_payoff(X, K)
+                exercise = exercise_value > continuation_estimated
+                idx = np.where(in_the_money)[0][exercise]
+                cash_flows[idx] = exercise_value[exercise]
+                exercise_times[idx] = t
+
+                # Store for visualization
+                option_values_triangle.append((t, paths[:, t], cash_flows))
+                continuation_values = np.zeros(n_paths)
+                continuation_values[in_the_money] = continuation_estimated
+                continuation_values_triangle.append((t, paths[:, t], continuation_values))
+
+    # Discount cash flows back to present
+    option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
+    option_values_triangle.reverse()  # For plotting from t=0 onward
+    continuation_values_triangle.reverse()
+    return option_price, option_values_triangle, continuation_values_triangle
+
+
+# Plot the grid for LSMC process with both option and continuation values in separate subplots
+def plot_lsmc_subplots(option_values_triangle, continuation_values_triangle, dt):
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8), sharey=True)
+    cmap = cm.viridis
+
+    # Calculate the global min and max values across all option and continuation values
+    all_option_values = np.concatenate([values for _, _, values in option_values_triangle])
+    all_continuation_values = np.concatenate([values for _, _, values in continuation_values_triangle])
+    vmin = min(all_option_values.min(), all_continuation_values.min())
+    vmax = max(all_option_values.max(), all_continuation_values.max())
+
+    # Option Values Plot
+    ax = axes[0]
+    for t, stock_prices, option_values in option_values_triangle:
+        T_step = t * dt
+        ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
+    ax.set_title("Option Values")
+    ax.set_xlabel("Time to Maturity (T)")
+    ax.set_ylabel("Stock Price (S)")
+
+    # Continuation Values Plot
+    ax = axes[1]
+    for t, stock_prices, continuation_values in continuation_values_triangle:
+        T_step = t * dt
+        ax.scatter([T_step] * len(stock_prices), stock_prices, c=continuation_values, cmap=cmap, s=30, marker='x', vmin=vmin, vmax=vmax)
+    ax.set_title("Continuation Values")
+    ax.set_xlabel("Time to Maturity (T)")
+
+    # Add colorbar with the correct value range
+    sm = cm.ScalarMappable(cmap=cmap, norm=mcolors.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])  # Required for matplotlib colorbar
+    fig.colorbar(sm, ax=axes.ravel().tolist(), label="Value")
+
+    plt.suptitle("LSMC Backward Iteration: Option Values vs Continuation Values")
+    plt.show()
+
+
+# Plot the grid for LSMC process with both option and continuation values
+def plot_lsmc_grid(option_values_triangle, continuation_values_triangle, dt):
+    fig, ax = plt.subplots(figsize=(14, 8))
+    cmap = cm.viridis
+
+    # Plot both option values and continuation values for each time step
+    for (t, stock_prices, option_values), (_, _, continuation_values) in zip(option_values_triangle, continuation_values_triangle):
+        T_step = t * dt
+        # Plot option values as circles
+        sc1 = ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=10, marker='o')
+        # Plot continuation values as crosses for comparison
+        sc2 = ax.scatter([T_step] * len(stock_prices), stock_prices, c=continuation_values, cmap="plasma", s=10, marker='x')
+
+    # Set title and labels
+    ax.set_title("LSMC Backward Iteration with Option and Continuation Values", pad=20)
+    ax.set_xlabel("Time to Maturity (T)", labelpad=15)
+    ax.set_ylabel("Stock Price (S)", labelpad=15)
+
+    # Add colorbars for option and continuation values
+    sm1 = cm.ScalarMappable(cmap=cmap, norm=sc1.norm)
+    sm2 = cm.ScalarMappable(cmap="plasma", norm=sc2.norm)
+    fig.colorbar(sm1, ax=ax, label="Option Value")
+    fig.colorbar(sm2, ax=ax, label="Continuation Value")
+
+    plt.show()
+
+
 # Generate MC asset price paths
 paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
 # Run LSMC with backward iteration visualization on triangular grid
-lsmc_price, option_values_triangle = lsmc_option_price_with_visualization(
+lsmc_price, option_values_triangle, continuation_values_triangle = lsmc_option_price_with_visualization(
     paths, K, r, dt, exercise_type=exercise_type, n_exercise_dates=n_exercise_dates)
 # Plot the grid to visualize the LSMC process
 if plot:
-    plot_lsmc_triangle(option_values_triangle, dt)
+    # plot_lsmc_grid(option_values_triangle, continuation_values_triangle, dt)
+    plot_lsmc_subplots(option_values_triangle, continuation_values_triangle, dt)
 
 # Compare final option prices from LSMC with QuantLib
 print(f"{exercise_type} Option Price (LSMC): {lsmc_price:.4f}")
