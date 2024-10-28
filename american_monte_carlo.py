@@ -16,7 +16,6 @@ n_time_steps = 19  # Number of time steps for grid (resolution of simulation)
 n_paths = 10  # Number of Monte Carlo paths
 dt = T / n_time_steps  # Time step size for simulation
 
-S_range = np.linspace(0, 200, 21)  # for grid
 exercise_type = "American"
 n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
 
