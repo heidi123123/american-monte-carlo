@@ -150,91 +150,8 @@ def lsmc_option_price_with_visualization(paths, K, r, dt, exercise_type="Europea
 
 
 # Plot the grid for LSMC process with both option and continuation values in separate subplots
-def plot_lsmc_subplots(option_values_triangle, continuation_values_triangle, dt, n_time_steps, key_S_lines=None):
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8), sharey=True)
-    cmap = cm.viridis
-
-    # Calculate the global min and max values across all option and continuation values
-    all_option_values = np.concatenate([values for _, _, values in option_values_triangle])
-    all_continuation_values = np.concatenate([values for _, _, values in continuation_values_triangle])
-    vmin = min(all_option_values.min(), all_continuation_values.min())
-    vmax = max(all_option_values.max(), all_continuation_values.max())
-
-    # Calculate unique time points based on n_time_steps
-    time_steps = [t * dt for t in range(n_time_steps + 1)]
-
-    # Option Values Plot with vertical time step lines
-    ax = axes[0]
-    for t, stock_prices, option_values in option_values_triangle:
-        T_step = t * dt
-        ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
-    ax.set_title("Option Values")
-    ax.set_xlabel("Time to Maturity (T)")
-    ax.set_ylabel("Stock Price (S)")
-
-    # Add vertical lines for each time step
-    for t in time_steps:
-        ax.axvline(t, color='gray', linestyle='--', linewidth=0.5)
-
-    # Optionally add horizontal lines for specified key stock prices
-    if key_S_lines:
-        for s in key_S_lines:
-            ax.axhline(s, color='gray', linestyle='-', linewidth=0.8)
-
-    # Continuation Values Plot with vertical time step lines
-    ax = axes[1]
-    for t, stock_prices, continuation_values in continuation_values_triangle:
-        T_step = t * dt
-        ax.scatter([T_step] * len(stock_prices), stock_prices, c=continuation_values, cmap=cmap, s=30, marker='x', vmin=vmin, vmax=vmax)
-    ax.set_title("Continuation Values")
-    ax.set_xlabel("Time to Maturity (T)")
-
-    # Add vertical lines for each time step
-    for t in time_steps:
-        ax.axvline(t, color='gray', linestyle='--', linewidth=0.5)
-
-    # Optionally add horizontal lines for specified key stock prices
-    if key_S_lines:
-        for s in key_S_lines:
-            ax.axhline(s, color='gray', linestyle='-', linewidth=0.8)
-
-    # Add colorbar with the correct value range
-    sm = cm.ScalarMappable(cmap=cmap, norm=mcolors.Normalize(vmin=vmin, vmax=vmax))
-    sm.set_array([])  # Required for matplotlib colorbar
-    fig.colorbar(sm, ax=axes.ravel().tolist(), label="Value")
-
-    plt.suptitle("LSMC Backward Iteration: Option Values vs Continuation Values with Key Grid Lines")
-    plt.show()
-
-
-# Plot the grid for LSMC process with both option and continuation values
-def plot_lsmc_grid(option_values_triangle, continuation_values_triangle, dt):
-    fig, ax = plt.subplots(figsize=(14, 8))
-    cmap = cm.viridis
-
-    # Plot both option values and continuation values for each time step
-    for (t, stock_prices, option_values), (_, _, continuation_values) in zip(option_values_triangle, continuation_values_triangle):
-        T_step = t * dt
-        # Plot option values as circles
-        sc1 = ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=10, marker='o')
-        # Plot continuation values as crosses for comparison
-        sc2 = ax.scatter([T_step] * len(stock_prices), stock_prices, c=continuation_values, cmap="plasma", s=10, marker='x')
-
-    # Set title and labels
-    ax.set_title("LSMC Backward Iteration with Option and Continuation Values", pad=20)
-    ax.set_xlabel("Time to Maturity (T)", labelpad=15)
-    ax.set_ylabel("Stock Price (S)", labelpad=15)
-
-    # Add colorbars for option and continuation values
-    sm1 = cm.ScalarMappable(cmap=cmap, norm=sc1.norm)
-    sm2 = cm.ScalarMappable(cmap="plasma", norm=sc2.norm)
-    fig.colorbar(sm1, ax=ax, label="Option Value")
-    fig.colorbar(sm2, ax=ax, label="Continuation Value")
-
-    plt.show()
-
-
-def plot_lsmc_with_asset_paths(option_values_triangle, continuation_values_triangle, paths, dt, n_time_steps, key_S_lines=None):
+def plot_lsmc_grid(option_values_triangle, continuation_values_triangle, paths, dt, n_time_steps,
+                   key_S_lines=None, plot_asset_paths=True, plot_values=False):
     fig, axes = plt.subplots(1, 2, figsize=(16, 8), sharey=True)
     cmap = cm.viridis
 
@@ -249,13 +166,19 @@ def plot_lsmc_with_asset_paths(option_values_triangle, continuation_values_trian
 
     # Option Values Plot with asset paths and grid lines
     ax = axes[0]
-    # Plot asset paths as faint lines
-    for path in paths:
-        ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
-    # Scatter option values
+    if plot_asset_paths:
+        # Plot asset paths as faint lines
+        for path in paths:
+            ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
+    # Scatter option values with labels
     for t, stock_prices, option_values in option_values_triangle:
         T_step = t * dt
         ax.scatter([T_step] * len(stock_prices), stock_prices, c=option_values, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
+        if plot_values:
+            # Add labels for each point
+            for i, (s, v) in enumerate(zip(stock_prices, option_values)):
+                ax.text(T_step, s, f"{v:.2f}", ha='center', va='center', fontsize=6, color="black",
+                        bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"))
     ax.set_title("Option Values")
     ax.set_xlabel("Time to Maturity (T)")
     ax.set_ylabel("Stock Price (S)")
@@ -271,13 +194,19 @@ def plot_lsmc_with_asset_paths(option_values_triangle, continuation_values_trian
 
     # Continuation Values Plot with asset paths and grid lines
     ax = axes[1]
-    # Plot asset paths as faint lines
-    for path in paths:
-        ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
-    # Scatter continuation values
+    if plot_asset_paths:
+        # Plot asset paths as faint lines
+        for path in paths:
+            ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
+    # Scatter continuation values with labels
     for t, stock_prices, continuation_values in continuation_values_triangle:
         T_step = t * dt
         ax.scatter([T_step] * len(stock_prices), stock_prices, c=continuation_values, cmap=cmap, s=30, marker='x', vmin=vmin, vmax=vmax)
+        if plot_values:
+            # Add labels for each point
+            for i, (s, v) in enumerate(zip(stock_prices, continuation_values)):
+                ax.text(T_step, s, f"{v:.2f}", ha='center', va='center', fontsize=6, color="black",
+                        bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"))
     ax.set_title("Continuation Values")
     ax.set_xlabel("Time to Maturity (T)")
 
@@ -295,7 +224,7 @@ def plot_lsmc_with_asset_paths(option_values_triangle, continuation_values_trian
     sm.set_array([])  # Required for matplotlib colorbar
     fig.colorbar(sm, ax=axes.ravel().tolist(), label="Value")
 
-    plt.suptitle("LSMC Backward Iteration: Option Values vs Continuation Values with Asset Paths")
+    plt.suptitle("LSMC Backward Iteration")
     plt.show()
 
 
@@ -306,10 +235,7 @@ lsmc_price, option_values_triangle, continuation_values_triangle = lsmc_option_p
     paths, K, r, dt, exercise_type=exercise_type, n_exercise_dates=n_exercise_dates)
 # Plot the grid to visualize the LSMC process
 if plot:
-    # plot_lsmc_grid(option_values_triangle, continuation_values_triangle, dt)
-    # plot_lsmc_subplots(option_values_triangle, continuation_values_triangle, dt, n_time_steps, key_S_lines=[S0, K])
-    plot_lsmc_with_asset_paths(option_values_triangle, continuation_values_triangle, paths, dt, n_time_steps,
-                               key_S_lines=[S0, K])
+    plot_lsmc_grid(option_values_triangle, continuation_values_triangle, paths, dt, n_time_steps, key_S_lines=[S0, K])
 
 # Compare final option prices from LSMC with QuantLib
 print(f"{exercise_type} Option Price (LSMC): {lsmc_price:.4f}")
