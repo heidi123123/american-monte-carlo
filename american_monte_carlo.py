@@ -61,11 +61,11 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercis
 # Generate Monte Carlo asset price paths using GBM
 def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
     dt = T / n_time_steps
-    paths = np.zeros((n_paths, n_time_steps))
+    Z = np.random.normal(size=(n_paths, n_time_steps))
+    growth_factor = (r - 0.5 * sigma ** 2) * dt
+    diffusion_factor = sigma * np.sqrt(dt) * Z
+    paths = np.exp(growth_factor + diffusion_factor).cumprod(axis=1) * S0
     paths[:, 0] = S0
-    for t in range(1, n_time_steps):
-        Z = np.random.normal(0, 1, n_paths)
-        paths[:, t] = paths[:, t - 1] * np.exp((r - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * Z)
     return paths
 
 
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
-    option_type = "Call"
+    option_type = "Put"
     exercise_type = "American"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
