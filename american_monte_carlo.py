@@ -84,16 +84,16 @@ def get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates):
         return np.arange(1, n_time_steps)
 
 
-# Update cash flows based on regression of continuation values
-def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type):
+# Update cashflows based on regression of continuation values
+def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type):
     in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
     in_the_money_idx = np.where(in_the_money)[0]
-    X, Y = paths[in_the_money, t], cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
+    X, Y = paths[in_the_money, t], cashflows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
     if len(X) > 0:
         continuation_estimated = regression_estimate(X, Y, basis_type, degree)
         exercise_value = intrinsic_value(X, K, option_type)
-        apply_exercise(cash_flows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t)
-        store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values, continuation_estimated)
+        apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t)
+        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values, continuation_estimated)
 
 
 # Generate basis polynomials based on the selected basis type
@@ -116,19 +116,19 @@ def regression_estimate(X, Y, basis_type="Power", degree=3):
 
 
 # Apply exercise if intrinsic value > continuation value
-def apply_exercise(cash_flows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
+def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
     exercise = exercise_value > continuation_estimated
     selected_idx = in_the_money_idx[exercise]
-    cash_flows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
+    cashflows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
 
 
 # Store option and continuation values (optionally) during LSMC backward iteration
-def store_option_values(t, stock_prices, cash_flows, option_values, continuation_values, continuation_estimated=None):
-    option_values.append((t, stock_prices[:len(cash_flows)], cash_flows[:len(cash_flows)]))
+def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
+    option_values.append((t, stock_prices[:len(cashflows)], cashflows[:len(cashflows)]))
     if continuation_estimated is not None:
         continuation_values.append((t, stock_prices[:len(continuation_estimated)], continuation_estimated))
     else:
-        continuation_values.append((t, stock_prices[:len(cash_flows)], cash_flows[:len(cash_flows)]))
+        continuation_values.append((t, stock_prices[:len(cashflows)], cashflows[:len(cashflows)]))
 
 
 # Plot LSMC process with option and continuation values
@@ -163,7 +163,7 @@ def get_color_range(option_values, continuation_values):
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
 def lsmc_option_pricing(paths, K, r, dt, option_type, exercise_type="European", n_exercise_dates=1):
     n_paths, n_time_steps = paths.shape
-    cash_flows = np.zeros(n_paths)
+    cashflows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps - 1)
 
     # Set exercise dates based on exercise type
@@ -172,16 +172,16 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, exercise_type="European", 
 
     for t in reversed(range(n_time_steps)):
         if t == n_time_steps - 1:
-            cash_flows = intrinsic_value(paths[:, t], K, option_type)
+            cashflows = intrinsic_value(paths[:, t], K, option_type)
             exercise_times = np.full(n_paths, t)
         elif t in exercise_dates:
-            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type)
+            update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type)
 
         # Store values at each timestep for visualization
-        store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values)
+        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
-    # Discount cash flows back to present
-    option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
+    # Calculate the discounted option price
+    option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
     option_values.reverse()
     continuation_values.reverse()
     return option_price, option_values, continuation_values
@@ -221,8 +221,8 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
 
 # Crop option_values and continuation_values to the first n_plotted_paths
 def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
-    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cash_flows[:n_plotted_paths])
-                             for t, stock_prices, cash_flows in option_values]
+    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cashflows[:n_plotted_paths])
+                             for t, stock_prices, cashflows in option_values]
 
     cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
                                    for t, stock_prices, continuation in continuation_values]
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
-    exercise_type = "American"
+    exercise_type = "European"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
     n_plotted_paths = 10
