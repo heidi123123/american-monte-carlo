@@ -121,17 +121,14 @@ def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_val
 
 # Generate basis polynomials based on the selected basis type
 def get_basis_polynomials(X, basis_type, degree):
-    if basis_type == "Power":
-        # Standard power basis: 1, X, X^2, ..., X^degree
-        return np.column_stack([X ** i for i in range(degree + 1)])
-    elif basis_type == "Chebyshev":
-        # Chebyshev polynomials of the first kind: T0(X), T1(X), T2(X), ...
-        return np.column_stack([np.polynomial.chebyshev.chebval(X, [0] * i + [1]) for i in range(degree + 1)])
-    elif basis_type == "Legendre":
-        # Legendre polynomials: P0(X), P1(X), P2(X), ...
-        return np.column_stack([np.polynomial.legendre.legval(X, [0] * i + [1]) for i in range(degree + 1)])
-    else:
+    basis_func_map = {"Power": lambda X, i: X ** i,
+                      "Chebyshev": lambda X, i: np.polynomial.chebyshev.chebval(X, [0] * i + [1]),
+                      "Legendre": lambda X, i: np.polynomial.legendre.legval(X, [0] * i + [1]),}
+
+    if basis_type not in basis_func_map:
         raise ValueError(f"Unknown basis type '{basis_type}'. Use 'Power', 'Chebyshev', or 'Legendre'.")
+
+    return np.column_stack([basis_func_map[basis_type](X, i) for i in range(degree + 1)])
 
 
 # Regression estimate of continuation value using specified basis functions
