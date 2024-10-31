@@ -263,7 +263,7 @@ def main():
     lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, exercise_type, n_exercise_dates)
 
     if plot:
-        option_values, continuation_values, paths = crop_data(option_values, continuation_values, paths, n_plotted_paths=5)
+        option_values, continuation_values, paths = crop_data(option_values, continuation_values, paths, n_plotted_paths)
         plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K])
 
     # Compare LSMC with QuantLib
@@ -278,13 +278,14 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.05  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 10  # Number of time steps for grid (resolution of simulation)
+    n_time_steps = 50  # Number of time steps for grid (resolution of simulation)
     n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     exercise_type = "American"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
+    n_plotted_paths = 10
 
     basis_type = "Chebyshev"
     degree = 4
