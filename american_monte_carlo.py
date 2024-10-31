@@ -1,10 +1,11 @@
 import numpy as np
-np.random.seed(42)
-
 import matplotlib.pyplot as plt
 import QuantLib as ql
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+
+
+np.random.seed(42)
 
 
 # Set up the QuantLib engine based on exercise type
@@ -157,14 +158,17 @@ def store_option_values(t, stock_prices, cash_flows, option_values, continuation
 
 
 # Plot LSMC process with option and continuation values
-def plot_lsmc_grid(option_values, continuation_values, paths, dt, n_time_steps, key_S_lines=None, plot_asset_paths=True):
+def plot_lsmc_grid(option_values, continuation_values, paths, dt,
+                   key_S_lines=None, plot_asset_paths=True, plot_values=False):
     fig, axes = plt.subplots(1, 2, figsize=(16, 8), sharey=True)
     cmap = cm.viridis
     vmin, vmax = get_color_range(option_values, continuation_values)
 
     # Plot option and continuation values with auxiliary grid and asset paths
-    plot_value_scatter(option_values, paths, dt, axes[0], "Option Values", vmin, vmax, key_S_lines, plot_asset_paths)
-    plot_value_scatter(continuation_values, paths, dt, axes[1], "Continuation Values", vmin, vmax, key_S_lines, plot_asset_paths)
+    plot_value_scatter(option_values, paths, dt, axes[0], "Option Values", vmin, vmax,
+                       key_S_lines, plot_asset_paths, plot_values)
+    plot_value_scatter(continuation_values, paths, dt, axes[1], "Continuation Values", vmin, vmax,
+                       key_S_lines, plot_asset_paths, plot_values)
 
     # Add colorbar
     sm = cm.ScalarMappable(cmap=cmap, norm=mcolors.Normalize(vmin=vmin, vmax=vmax))
@@ -178,7 +182,8 @@ def plot_lsmc_grid(option_values, continuation_values, paths, dt, n_time_steps, 
 def get_color_range(option_values, continuation_values):
     all_option_values = np.concatenate([values for _, _, values in option_values])
     all_continuation_values = np.concatenate([values for _, _, values in continuation_values])
-    return min(all_option_values.min(), all_continuation_values.min()), max(all_option_values.max(), all_continuation_values.max())
+    return min(all_option_values.min(), all_continuation_values.min()), max(all_option_values.max(),
+                                                                            all_continuation_values.max())
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
@@ -209,8 +214,7 @@ def lsmc_option_pricing(paths, K, r, dt, exercise_type="European", n_exercise_da
 
 
 # Plot value scatter plots with labels and gridlines
-def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines=None, plot_asset_paths=True,
-                       plot_values=False):
+def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, plot_values):
     cmap = cm.viridis
     time_steps = [t * dt for t in range(len(paths[0]))]
 
@@ -245,9 +249,10 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines=Non
 # Main function to run LSMC and plot results
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, exercise_type, n_exercise_dates)
+    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, exercise_type,
+                                                                         n_exercise_dates)
     if plot:
-        plot_lsmc_grid(option_values, continuation_values, paths, dt, n_time_steps, key_S_lines=[S0, K])
+        plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K], plot_values=True)
 
     # Compare LSMC with QuantLib
     quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, exercise_type, n_exercise_dates)
@@ -265,7 +270,7 @@ if __name__ == "__main__":
     n_paths = 10  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
-    exercise_type = "American"
+    exercise_type = "European"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
     main()
