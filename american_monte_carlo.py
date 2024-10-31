@@ -113,7 +113,7 @@ def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_val
     in_the_money = intrinsic_value(paths[:, t], K) > 0
     X, Y = paths[in_the_money, t], cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
     if len(X) > 0:
-        continuation_estimated = regression_estimate(X, Y)
+        continuation_estimated = regression_estimate(X, Y, basis_type, degree)
         apply_exercise(X, K, continuation_estimated, cash_flows, exercise_times, t, in_the_money)
         store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values, continuation_estimated)
 
@@ -232,7 +232,6 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
         sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
 
         if plot_values:
-            # Add labels for each point
             for s, v in zip(stock_prices, option_vals):
                 ax.text(T_step, s, f"{v:.2f}", ha='center', va='center', fontsize=6, color="black",
                         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"))
@@ -266,11 +265,14 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.05  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 19  # Number of time steps for grid (resolution of simulation)
-    n_paths = 10  # Number of Monte Carlo paths
+    n_time_steps = 4  # Number of time steps for grid (resolution of simulation)
+    n_paths = 5  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
-    exercise_type = "European"
+    exercise_type = "American"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
+
+    basis_type = "Chebyshev"
+    degree = 4
     main()
