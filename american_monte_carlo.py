@@ -49,10 +49,10 @@ def setup_exercise_and_engine(S0, K, r, T, sigma, n_steps, exercise_type="Europe
 
 
 # Generate QuantLib option for comparison
-def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_style="Call", exercise_type="European", n_exercise_dates=1):
+def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercise_type="European", n_exercise_dates=1):
     exercise, engine = setup_exercise_and_engine(S0, K, r, T, sigma, n_steps, exercise_type, n_exercise_dates)
-    option_style = ql.Option.Put if option_style == "Put" else ql.Option.Call
-    payoff = ql.PlainVanillaPayoff(option_style, K)
+    option_type = ql.Option.Put if option_type == "Put" else ql.Option.Call
+    payoff = ql.PlainVanillaPayoff(option_type, K)
     option = ql.VanillaOption(payoff, exercise)
     option.setPricingEngine(engine)
     return option
@@ -70,12 +70,12 @@ def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
 
 
 # Calculate intrinsic value
-def intrinsic_value(S, K, option_style="Call"):
-    return np.maximum(K - S, 0) if option_style == "Put" else np.maximum(S - K, 0)
+def intrinsic_value(S, K, option_type="Call"):
+    return np.maximum(K - S, 0) if option_type == "Put" else np.maximum(S - K, 0)
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_style="Call", exercise_type="European", n_exercise_dates=1):
+def lsmc_option_pricing(paths, K, r, dt, option_type="Call", exercise_type="European", n_exercise_dates=1):
     n_paths, n_time_steps = paths.shape
     cash_flows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps - 1)
@@ -90,7 +90,7 @@ def lsmc_option_pricing(paths, K, r, dt, option_style="Call", exercise_type="Eur
             exercise_times = np.full(n_paths, t)
             store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values)
         elif t in exercise_dates:
-            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_style)
+            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type)
 
     # Discount cash flows back to present
     option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
@@ -110,13 +110,13 @@ def get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates):
 
 
 # Update cash flows based on regression of continuation values
-def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_style):
-    in_the_money = intrinsic_value(paths[:, t], K, option_style) > 0
+def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type):
+    in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
     in_the_money_idx = np.where(in_the_money)[0]
     X, Y = paths[in_the_money, t], cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
     if len(X) > 0:
         continuation_estimated = regression_estimate(X, Y, basis_type, degree)
-        exercise_value = intrinsic_value(X, K, option_style)
+        exercise_value = intrinsic_value(X, K, option_type)
         apply_exercise(cash_flows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t)
         store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values, continuation_estimated)
 
@@ -186,7 +186,7 @@ def get_color_range(option_values, continuation_values):
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_style, exercise_type="European", n_exercise_dates=1):
+def lsmc_option_pricing(paths, K, r, dt, option_type, exercise_type="European", n_exercise_dates=1):
     n_paths, n_time_steps = paths.shape
     cash_flows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps - 1)
@@ -197,10 +197,10 @@ def lsmc_option_pricing(paths, K, r, dt, option_style, exercise_type="European",
 
     for t in reversed(range(n_time_steps)):
         if t == n_time_steps - 1:
-            cash_flows = intrinsic_value(paths[:, t], K, option_style)
+            cash_flows = intrinsic_value(paths[:, t], K, option_type)
             exercise_times = np.full(n_paths, t)
         elif t in exercise_dates:
-            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_style)
+            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type)
 
         # Store values at each timestep for visualization
         store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values)
@@ -259,7 +259,7 @@ def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
 # Main function to run LSMC and plot results
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_style,
+    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type,
                                                                          exercise_type, n_exercise_dates)
 
     if plot:
@@ -267,7 +267,7 @@ def main():
         plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K])
 
     # Compare LSMC with QuantLib
-    quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_style, exercise_type, n_exercise_dates)
+    quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, n_exercise_dates)
     print(f"{exercise_type} Option Price (LSMC): {lsmc_price:.4f}")
     print(f"{exercise_type} Option Price (QuantLib): {quantlib_option.NPV():.4f}")
 
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
-    option_style = "Put"
+    option_type = "Call"
     exercise_type = "American"
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     plot = True
