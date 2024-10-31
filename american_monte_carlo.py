@@ -112,10 +112,12 @@ def get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates):
 # Update cash flows based on regression of continuation values
 def update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_style):
     in_the_money = intrinsic_value(paths[:, t], K, option_style) > 0
+    in_the_money_idx = np.where(in_the_money)[0]
     X, Y = paths[in_the_money, t], cash_flows[in_the_money] * np.exp(-r * dt * (exercise_times[in_the_money] - t))
     if len(X) > 0:
         continuation_estimated = regression_estimate(X, Y, basis_type, degree)
-        apply_exercise(X, K, continuation_estimated, cash_flows, exercise_times, t, in_the_money, option_style)
+        exercise_value = intrinsic_value(X, K, option_style)
+        apply_exercise(cash_flows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t)
         store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values, continuation_estimated)
 
 
@@ -139,11 +141,10 @@ def regression_estimate(X, Y, basis_type="Power", degree=3):
 
 
 # Apply exercise if intrinsic value > continuation value
-def apply_exercise(X, K, continuation_estimated, cash_flows, exercise_times, t, in_the_money, option_style):
-    exercise_value = intrinsic_value(X, K, option_style)
+def apply_exercise(cash_flows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
     exercise = exercise_value > continuation_estimated
-    idx = np.where(in_the_money)[0][exercise]
-    cash_flows[idx], exercise_times[idx] = exercise_value[exercise], t
+    selected_idx = in_the_money_idx[exercise]
+    cash_flows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
 
 
 # Store option and continuation values (optionally) during LSMC backward iteration
