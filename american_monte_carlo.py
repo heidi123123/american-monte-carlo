@@ -245,13 +245,26 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
         ax.axvline(t, color='gray', linestyle='--', linewidth=0.5)
 
 
+# Crop option_values and continuation_values to the first n_plotted_paths
+def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
+    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cash_flows[:n_plotted_paths])
+                             for t, stock_prices, cash_flows in option_values]
+
+    cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
+                                   for t, stock_prices, continuation in continuation_values]
+
+    cropped_paths = paths[:n_plotted_paths]
+    return cropped_option_values, cropped_continuation_values, cropped_paths
+
+
 # Main function to run LSMC and plot results
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, exercise_type,
-                                                                         n_exercise_dates)
+    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, exercise_type, n_exercise_dates)
+
     if plot:
-        plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K], plot_values=True)
+        option_values, continuation_values, paths = crop_data(option_values, continuation_values, paths, n_plotted_paths=5)
+        plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K])
 
     # Compare LSMC with QuantLib
     quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, exercise_type, n_exercise_dates)
@@ -265,8 +278,8 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.05  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 4  # Number of time steps for grid (resolution of simulation)
-    n_paths = 5  # Number of Monte Carlo paths
+    n_time_steps = 10  # Number of time steps for grid (resolution of simulation)
+    n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     exercise_type = "American"
