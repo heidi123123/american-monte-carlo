@@ -74,31 +74,6 @@ def intrinsic_value(S, K, option_type="Call"):
     return np.maximum(K - S, 0) if option_type == "Put" else np.maximum(S - K, 0)
 
 
-# Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_type="Call", exercise_type="European", n_exercise_dates=1):
-    n_paths, n_time_steps = paths.shape
-    cash_flows = np.zeros(n_paths)
-    exercise_times = np.full(n_paths, n_time_steps - 1)
-
-    # Set exercise dates based on exercise type
-    exercise_dates = get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates)
-    option_values, continuation_values = [], []
-
-    for t in reversed(range(n_time_steps)):
-        if t == n_time_steps - 1:
-            cash_flows = intrinsic_value(paths[:, t], K)
-            exercise_times = np.full(n_paths, t)
-            store_option_values(t, paths[:, t], cash_flows, option_values, continuation_values)
-        elif t in exercise_dates:
-            update_cash_flows(paths, t, K, r, dt, cash_flows, exercise_times, option_values, continuation_values, option_type)
-
-    # Discount cash flows back to present
-    option_price = np.mean(cash_flows * np.exp(-r * dt * exercise_times))
-    option_values.reverse()
-    continuation_values.reverse()
-    return option_price, option_values, continuation_values
-
-
 # Define exercise dates based on option type
 def get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates):
     if exercise_type == "European":
