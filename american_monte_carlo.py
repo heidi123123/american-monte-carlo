@@ -176,31 +176,35 @@ def get_color_range(option_values, continuation_values):
                                                                             all_continuation_values.max())
 
 
-# Function to update knock-in flags at of before time t
-def check_barrier_hit(paths, barrier_level, barrier_hit, t):
-    new_breaches = paths[:, t] <= barrier_level
-    # Update the knock_in_flags: once a path knocks in, it stays knocked in
+# Function to update barrier_hit flags
+def check_barrier_hit(paths, barrier_level, barrier_hit, t, barrier_type):
+    if barrier_type == 'DownIn':
+        new_breaches = paths[:, t] <= barrier_level
+    elif barrier_type == 'UpIn':
+        new_breaches = paths[:, t] >= barrier_level
+    else:
+        raise ValueError('Unsupported barrier type')
     barrier_hit |= new_breaches
     return barrier_hit
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None, exercise_type="European", n_exercise_dates=1):
+def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None, barrier_type=None, exercise_type="European", n_exercise_dates=1):
     n_paths, n_time_steps = paths.shape
     cashflows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps - 1)
 
-    # Initialize barrier_hit flags to False (no paths have breached initially)
+    # Initialize barrier_hit flags
     barrier_hit = np.zeros(n_paths, dtype=bool) if barrier_level is not None else np.ones(n_paths, dtype=bool)
 
-    # Set exercise dates based on exercise type
+    # Set exercise dates
     exercise_dates = get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates)
     option_values, continuation_values = [], []
 
     for t in reversed(range(n_time_steps)):
         # Update barrier_hit flags at each timestep
         if barrier_level is not None:
-            barrier_hit = check_barrier_hit(paths, barrier_level, barrier_hit, t)
+            barrier_hit = check_barrier_hit(paths, barrier_level, barrier_hit, t, barrier_type)
 
         if t == n_time_steps - 1:
             # Calculate intrinsic value only for paths that have barrier hit
@@ -211,7 +215,7 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None, exerci
 
         store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
-    # Corrected calculation: include all paths
+    # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
     option_values.reverse()
     continuation_values.reverse()
@@ -265,22 +269,35 @@ def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
 # Main function to run LSMC and plot results
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-    lsmc_price, option_values, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level,
-                                                                         exercise_type, n_exercise_dates)
 
-    option_values, continuation_values, paths = crop_data(option_values, continuation_values, paths, n_plotted_paths)
-    plot_lsmc_grid(option_values, continuation_values, paths, dt, key_S_lines=[S0, K])
+    if barrier_level is not None:
+        barrier_type = 'DownIn' if barrier_level < S0 else 'UpIn'  # determine barrier_type based on barrier_level
+    else:
+        barrier_type = None
+
+    lsmc_price, option_values, continuation_values = lsmc_option_pricing(
+        paths, K, r, dt, option_type, barrier_level, barrier_type, exercise_type, n_exercise_dates
+    )
+
+    option_values, continuation_values, paths_cropped = crop_data(
+        option_values, continuation_values, paths, n_plotted_paths
+    )
+    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K])
 
     # Compare LSMC with QuantLib
-    quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type,
-                                          exercise_type, n_exercise_dates, barrier_level)
-    quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type,
-                                          exercise_type, n_exercise_dates)
-    barrier_pct = barrier_level / S0 * 100 if barrier_level else 500
+    quantlib_barrier_option = get_quantlib_option(
+        S0, K, r, T, sigma, n_time_steps, option_type,
+        exercise_type, n_exercise_dates, barrier_level
+    )
+    quantlib_option = get_quantlib_option(
+        S0, K, r, T, sigma, n_time_steps, option_type,
+        exercise_type, n_exercise_dates
+    )
+    barrier_pct = barrier_level / S0 * 100 if barrier_level else None
     option_description = f"{exercise_type} {option_type}"
     print(f"{option_description} Option Price with {barrier_pct}% Barrier (LSMC): {lsmc_price:.4f}")
     print(f"{option_description} Option Price with {barrier_pct}% Barrier (QuantLib): {quantlib_barrier_option.NPV():.4f}")
-    print(f"{option_description} Option Price (QuantLib): {quantlib_option.NPV():.4f}")
+    print(f"{option_description} Option Price without Barrier (QuantLib): {quantlib_option.NPV():.4f}")
 
 
 if __name__ == "__main__":
