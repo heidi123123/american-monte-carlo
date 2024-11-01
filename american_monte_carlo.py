@@ -100,7 +100,7 @@ def get_exercise_dates(exercise_type, n_time_steps, n_exercise_dates):
 
 # Update cashflows based on regression of continuation values
 def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type,
-                     barrier_hit):
+                     barrier_hit, basis_type, degree):
     in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
     valid_paths = barrier_hit & in_the_money
     X, Y = paths[valid_paths, t], cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
@@ -140,11 +140,11 @@ def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, 
 
 # Store option and continuation values (optionally) during LSMC backward iteration
 def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
-    option_values.append((t, stock_prices[:len(cashflows)], cashflows[:len(cashflows)]))
+    option_values.append((t, stock_prices, cashflows))
     if continuation_estimated is not None:
-        continuation_values.append((t, stock_prices[:len(continuation_estimated)], continuation_estimated))
+        continuation_values.append((t, stock_prices, continuation_estimated))
     else:
-        continuation_values.append((t, stock_prices[:len(cashflows)], cashflows[:len(cashflows)]))
+        continuation_values.append((t, stock_prices, cashflows))
 
 
 # Plot LSMC process with option and continuation values
@@ -189,7 +189,9 @@ def check_barrier_hit(paths, barrier_level, barrier_hit, t, barrier_type):
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None, barrier_type=None, exercise_type="European", n_exercise_dates=1):
+def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
+                        barrier_type=None, exercise_type="European", n_exercise_dates=1,
+                        basis_type="Chebyshev", degree=3):
     n_paths, n_time_steps = paths.shape
     cashflows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps - 1)
@@ -211,7 +213,8 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None, barrie
             cashflows[barrier_hit] = intrinsic_value(paths[barrier_hit, t], K, option_type)
             exercise_times[barrier_hit] = t
         elif t in exercise_dates:
-            update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type, barrier_hit)
+            update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values,
+                             option_type, barrier_hit, basis_type, degree)
 
         store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
@@ -270,13 +273,9 @@ def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
 
-    if barrier_level is not None:
-        barrier_type = 'DownIn' if barrier_level < S0 else 'UpIn'  # determine barrier_type based on barrier_level
-    else:
-        barrier_type = None
-
     lsmc_price, option_values, continuation_values = lsmc_option_pricing(
-        paths, K, r, dt, option_type, barrier_level, barrier_type, exercise_type, n_exercise_dates
+        paths, K, r, dt, option_type, barrier_level, barrier_type, exercise_type, n_exercise_dates,
+        basis_type, degree
     )
 
     option_values, continuation_values, paths_cropped = crop_data(
@@ -316,6 +315,10 @@ if __name__ == "__main__":
     n_exercise_dates = 4  # Number of exercise dates (Bermudan feature)
     n_plotted_paths = 6
     barrier_level = 0.7 * S0
+    if barrier_level is not None:
+        barrier_type = 'DownIn' if barrier_level < S0 else 'UpIn'  # determine barrier_type based on barrier_level
+    else:
+        barrier_type = None
 
     basis_type = "Chebyshev"
     degree = 4
