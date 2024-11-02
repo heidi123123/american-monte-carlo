@@ -18,7 +18,8 @@ def plot_asset_paths(paths, T, n_time_steps, n_paths_to_plot=100):
     plt.show()
 
 
-def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, path_range):
+def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, path_range,
+                                basis_type='Chebyshev', degree=4):
     lsmc_prices = []
     n_paths_list = path_range
     benchmark_option = get_quantlib_option(
@@ -30,17 +31,24 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
     for n_paths in n_paths_list:
         paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
         lsmc_price, _, _ = lsmc_option_pricing(
-            paths, K, r, dt, option_type, exercise_type=exercise_type, basis_type='Chebyshev', degree=4
+            paths, K, r, dt, option_type, exercise_type=exercise_type, basis_type=basis_type, degree=degree
         )
         lsmc_prices.append(lsmc_price)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(n_paths_list, lsmc_prices, label='LSMC Estimated Price', marker='o')
-    plt.axhline(benchmark_price, color='red', linestyle='--', label='Benchmark Price (QuantLib)')
-    plt.xlabel('Number of Paths')
-    plt.ylabel('Option Price')
-    plt.title('Convergence of LSMC Option Price with Number of Paths')
-    plt.legend()
+    plt.figure(figsize=(12, 8))
+    plt.plot(n_paths_list, lsmc_prices, color='royalblue', marker='o', linestyle='-', linewidth=2, markersize=6,
+             label='LSMC Estimated Price')
+
+    # Benchmark line
+    plt.axhline(benchmark_price, color='red', linestyle='--', linewidth=2, label='Benchmark Price (QuantLib)')
+
+    # Plot styling
+    plt.xlabel('Number of Paths', fontsize=12)
+    plt.ylabel(f'{option_type} Option Price', fontsize=12)
+    plt.title(f'Convergence of LSMC {option_type} Option Price with Number of Paths', fontsize=14, fontweight='bold')
+    plt.grid(visible=True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+    plt.legend(fontsize=10)
+    plt.tight_layout()
     plt.show()
 
 
@@ -70,12 +78,12 @@ def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option
                  linewidth=2, markersize=6)
 
     # Benchmark line
-    plt.axhline(benchmark_price, color='red', linestyle='--', linewidth=2, label='Benchmark Price')
+    plt.axhline(benchmark_price, color='red', linestyle='--', linewidth=2, label='Benchmark Price (QuantLib)')
 
     # Plot styling
     plt.xlabel("Degree of Polynomial Basis", fontsize=12)
-    plt.ylabel("Option Price", fontsize=12)
-    plt.title("LSMC Option Price vs. Degree of Polynomial Basis", fontsize=14, fontweight='bold')
+    plt.ylabel(f"{option_type} Option Price", fontsize=12)
+    plt.title(f"LSMC {option_type} Option Price vs. Degree of Polynomial Basis", fontsize=14, fontweight='bold')
     plt.grid(visible=True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
     plt.legend(fontsize=10)
     plt.tight_layout()
@@ -105,8 +113,8 @@ if __name__ == "__main__":
         exercise_type=exercise_type, max_degree=10
     )
 
-    path_range = [100, 500, 1000, 5000, 10000]
+    path_range = [500, 1000, 3000, 5000, 7000, 10000]
     plot_convergence_with_paths(
         S0=S0, K=K, r=r, T=T, sigma=sigma, n_time_steps=n_time_steps, option_type=option_type,
-        exercise_type=exercise_type, path_range=path_range
+        exercise_type=exercise_type, path_range=path_range, basis_type=basis_type, degree=degree
     )
