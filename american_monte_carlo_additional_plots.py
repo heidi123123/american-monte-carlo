@@ -1,4 +1,3 @@
-import numpy as np
 import matplotlib as plt
 from american_monte_carlo import *
 
@@ -18,12 +17,11 @@ def plot_asset_paths(paths, T, n_time_steps, n_paths_to_plot=100):
     plt.show()
 
 
-def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, n_exercise_dates, path_range):
+def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, path_range):
     lsmc_prices = []
     n_paths_list = path_range
     benchmark_option = get_quantlib_option(
-        S0, K, r, T, sigma, n_time_steps, option_type,
-        exercise_type, n_exercise_dates
+        S0, K, r, T, sigma, n_time_steps, option_type, exercise_type
     )
     benchmark_price = benchmark_option.NPV()
 
@@ -31,15 +29,12 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
     for n_paths in n_paths_list:
         paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
         lsmc_price, _, _ = lsmc_option_pricing(
-            paths, K, r, dt, option_type,
-            exercise_type=exercise_type, n_exercise_dates=n_exercise_dates,
-            basis_type='Chebyshev', degree=4
+            paths, K, r, dt, option_type, exercise_type=exercise_type, basis_type='Chebyshev', degree=4
         )
         lsmc_prices.append(lsmc_price)
 
-    # Plotting
     plt.figure(figsize=(10, 6))
-    plt.plot(n_paths_list, lsmc_prices, label='LSMC Estimated Price')
+    plt.plot(n_paths_list, lsmc_prices, label='LSMC Estimated Price', marker='o')
     plt.axhline(benchmark_price, color='red', linestyle='--', label='Benchmark Price (QuantLib)')
     plt.xlabel('Number of Paths')
     plt.ylabel('Option Price')
@@ -47,20 +42,9 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
     plt.legend()
     plt.show()
 
-    """# Calculate + plot errors
-    errors = np.abs(np.array(lsmc_prices) - benchmark_price)
-    plt.figure(figsize=(10, 6))
-    plt.plot(n_paths_list, errors, label='Absolute Error')
-    plt.xlabel('Number of Paths')
-    plt.ylabel('Error')
-    plt.title('Error of LSMC Option Price vs. Number of Paths')
-    plt.legend()
-    plt.show()"""
-
 
 path_range = [100, 500, 1000, 5000, 10000]
 plot_convergence_with_paths(
-    S0=100, K=100, r=0.05, T=1.0, sigma=0.2,
-    n_time_steps=50, option_type='Put', exercise_type='American',
-    n_exercise_dates=4, path_range=path_range
+    S0=100, K=100, r=0.05, T=1.0, sigma=0.2, n_time_steps=50, option_type='Put',
+    exercise_type='American', path_range=path_range
 )
