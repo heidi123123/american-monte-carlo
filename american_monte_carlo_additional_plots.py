@@ -1,4 +1,3 @@
-import numpy as np
 import matplotlib as plt
 from american_monte_carlo import *
 
