@@ -51,6 +51,88 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
     plt.show()
 
 
+def plot_convergence_with_time_steps(S0, K, r, T, sigma, n_paths, option_type, exercise_type, time_step_range,
+                                    basis_type='Chebyshev', degree=4):
+    lsmc_prices = []
+    benchmark_option = get_quantlib_option(
+        S0, K, r, T, sigma, max(time_step_range), option_type, exercise_type
+    )
+    benchmark_price = benchmark_option.NPV()
+
+    for n_time_steps in time_step_range:
+        dt = T / n_time_steps
+        paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
+        lsmc_price, _, _ = lsmc_option_pricing(
+            paths, K, r, dt, option_type, exercise_type=exercise_type, basis_type=basis_type, degree=degree
+        )
+        lsmc_prices.append(lsmc_price)
+
+    plt.figure(figsize=(12, 8))
+    plt.plot(time_step_range, lsmc_prices, color='royalblue', marker='o', linestyle='-', linewidth=2, markersize=6,
+             label='LSMC Estimated Price')
+
+    # Benchmark line
+    plt.axhline(benchmark_price, color='red', linestyle='--', linewidth=2, label='Benchmark Price (QuantLib)')
+
+    # Plot styling
+    plt.xlabel('Number of Time Steps', fontsize=12)
+    plt.ylabel(f'{option_type} Option Price', fontsize=12)
+    plt.title(f'Convergence of LSMC {option_type} Option Price with Number of Time Steps', fontsize=14, fontweight='bold')
+    plt.grid(visible=True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+    plt.legend(fontsize=10)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_error_heatmap(S0, K, r, T, sigma, time_step_range, path_range, option_type, exercise_type,
+                       basis_type='Chebyshev', degree=4):
+    # Initialize a matrix to hold the absolute error for each (time step, path) pair
+    error_matrix = np.zeros((len(path_range), len(time_step_range)))
+
+    # Calculate the benchmark option price using QuantLib
+    benchmark_option = get_quantlib_option(S0, K, r, T, sigma, max(time_step_range), option_type, exercise_type)
+    benchmark_price = benchmark_option.NPV()
+
+    # Fill the error matrix with absolute errors
+    for i, n_paths in enumerate(path_range):
+        for j, n_time_steps in enumerate(time_step_range):
+            dt = T / n_time_steps
+            paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
+            lsmc_price, _, _ = lsmc_option_pricing(
+                paths, K, r, dt, option_type, exercise_type=exercise_type, basis_type=basis_type, degree=degree
+            )
+            # Store the absolute error in the matrix
+            error_matrix[i, j] = abs(lsmc_price - benchmark_price)
+
+    # Find the indices of the minimum error
+    min_error_index = np.unravel_index(np.argmin(error_matrix, axis=None), error_matrix.shape)
+    min_error_value = error_matrix[min_error_index]
+    min_n_paths = path_range[min_error_index[0]]
+    min_n_time_steps = time_step_range[min_error_index[1]]
+
+    # Plot the heatmap of absolute errors
+    plt.figure(figsize=(10, 8))
+    c = plt.pcolormesh(time_step_range, path_range, error_matrix, shading='auto', cmap='viridis')
+    plt.colorbar(c, label='Absolute Error')
+
+    # Highlight the minimum combination of time steps and paths
+    plt.scatter(min_n_time_steps, min_n_paths, color='red', s=100, edgecolor='black', marker='*',
+                label=f'Minimum Absolute Error\nN={min_n_time_steps}, TimeSteps={min_n_paths}')
+
+    # Set ticks to match the tested points and add grid lines
+    plt.xticks(time_step_range, rotation=45)
+    plt.yticks(path_range)
+    plt.grid(visible=True, color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+
+    # Labels and title
+    plt.xlabel("Number of Time Steps")
+    plt.ylabel("Number of Paths (Log Scale)")
+    plt.title(f"Absolute Error in {option_type} Option Price with {exercise_type} Exercise")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option_type, exercise_type, max_degree):
     degrees = range(1, max_degree + 1)
     benchmark_option = get_quantlib_option(
@@ -100,8 +182,8 @@ if __name__ == "__main__":
     n_paths = 1000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
-    option_type = "Put"
-    exercise_type = "European"
+    option_type = "Call"
+    exercise_type = "American"
     n_plotted_paths = 6
     barrier_level = None
     basis_type = "Chebyshev"
@@ -116,4 +198,15 @@ if __name__ == "__main__":
     plot_convergence_with_paths(
         S0=S0, K=K, r=r, T=T, sigma=sigma, n_time_steps=n_time_steps, option_type=option_type,
         exercise_type=exercise_type, path_range=path_range, basis_type=basis_type, degree=degree
+    )
+
+    time_step_range = [5, 10, 50, 100, 150, 250]
+    plot_convergence_with_time_steps(
+        S0=S0, K=K, r=r, T=T, sigma=sigma, n_paths=n_paths, option_type=option_type, exercise_type=exercise_type,
+        time_step_range=time_step_range, basis_type=basis_type, degree=degree
+    )
+
+    plot_error_heatmap(
+        S0=S0, K=K, r=r, T=T, sigma=sigma, time_step_range=time_step_range, path_range=path_range,
+        option_type=option_type, exercise_type=exercise_type, basis_type=basis_type, degree=degree
     )
