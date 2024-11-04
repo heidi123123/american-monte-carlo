@@ -89,9 +89,9 @@ def get_exercise_dates(exercise_type, n_time_steps):
 
 # Update cashflows based on regression of continuation values
 def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type,
-                     barrier_hit, basis_type, degree):
+                     barrier_hit_t, basis_type, degree):
     in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
-    valid_paths = barrier_hit & in_the_money
+    valid_paths = barrier_hit_t & in_the_money
     X, Y = paths[valid_paths, t], cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
 
     if len(X) > 0:
@@ -175,29 +175,31 @@ def check_barrier_hit(paths, barrier_level, barrier_hit, t):
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
 def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
                         exercise_type="European", basis_type="Chebyshev", degree=3):
-    n_paths, n_time_steps = paths.shape
+    n_paths, n_time_steps_plus_one = paths.shape
+    n_time_steps = n_time_steps_plus_one - 1
     cashflows = np.zeros(n_paths)
-    exercise_times = np.full(n_paths, n_time_steps - 1)
+    exercise_times = np.full(n_paths, n_time_steps)
 
-    # Initialize barrier_hit flags
-    barrier_hit = np.zeros(n_paths, dtype=bool) if barrier_level is not None else np.ones(n_paths, dtype=bool)
+    # Precompute barrier hit matrix
+    if barrier_level is not None:
+        barrier_hit = np.maximum.accumulate(paths <= barrier_level, axis=1)
+    else:
+        barrier_hit = np.ones_like(paths, dtype=bool)
 
     # Set exercise dates
-    exercise_dates = get_exercise_dates(exercise_type, n_time_steps - 1)
+    exercise_dates = get_exercise_dates(exercise_type, n_time_steps)
     option_values, continuation_values = [], []
 
-    for t in reversed(range(n_time_steps)):
-        # Update barrier_hit flags at each timestep
-        if barrier_level is not None:
-            barrier_hit = check_barrier_hit(paths, barrier_level, barrier_hit, t)
+    for t in reversed(range(n_time_steps + 1)):
+        barrier_hit_t = barrier_hit[:, t]
 
-        if t == n_time_steps - 1:
-            # Calculate intrinsic value only for paths that have barrier hit
-            cashflows[barrier_hit] = intrinsic_value(paths[barrier_hit, t], K, option_type)
-            exercise_times[barrier_hit] = t
+        if t == n_time_steps:
+            # At maturity, pay intrinsic value if barrier has been hit
+            cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
+            exercise_times[barrier_hit_t] = t
         elif t in exercise_dates:
-            update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values,
-                             option_type, barrier_hit, basis_type, degree)
+            update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values,
+                             continuation_values, option_type, barrier_hit_t, basis_type, degree)
 
         store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
@@ -293,7 +295,7 @@ if __name__ == "__main__":
     option_type = "Put"
     exercise_type = "European"
     n_plotted_paths = 6
-    barrier_level = None
+    barrier_level = 0.8 * S0
     basis_type = "Chebyshev"
     degree = 4
     main()
