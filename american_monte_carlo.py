@@ -222,16 +222,17 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
     # Iterate over time steps and plot option values
     for t, stock_prices, option_vals in values:
         T_step = t * dt
-        # Expand stock_prices and option_vals to match the full size
-        x_values = np.full(len(stock_prices), T_step)  # Same time step for all stock prices
+        # Ensure that x_values and stock_prices/option_vals have consistent lengths
+        if len(stock_prices) == len(option_vals):
+            x_values = np.full(len(stock_prices), T_step)  # Same time step for all stock prices
 
-        # Scatter plot with expanded values
-        sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
+            # Scatter plot with expanded values
+            sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
 
-        if plot_values:
-            for s, v in zip(stock_prices, option_vals):
-                ax.text(T_step, s, f"{v:.2f}", ha='center', va='center', fontsize=6, color="black",
-                        bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"))
+            if plot_values:
+                for s, v in zip(stock_prices, option_vals):
+                    ax.text(T_step, s, f"{v:.2f}", ha='center', va='center', fontsize=6, color="black",
+                            bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"))
 
     ax.set_title(title)
     ax.set_xlabel("Time to Maturity (T)")
@@ -263,7 +264,7 @@ def main():
     )
 
     option_values, continuation_values, paths_cropped = crop_data(
-        option_values, continuation_values, paths, n_plotted_paths
+        option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
     plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K])
 
