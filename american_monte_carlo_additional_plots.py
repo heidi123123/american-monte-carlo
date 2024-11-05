@@ -56,7 +56,10 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
 def plot_convergence_with_time_steps(S0, K, r, T, sigma, n_paths, option_type, exercise_type, barrier_level,
                                      time_step_range, basis_type='Chebyshev', degree=4):
     lsmc_prices = []
-    benchmark_option = get_quantlib_option(S0, K, r, T, sigma, max(time_step_range), option_type,
+
+    # Calculate the benchmark option price using QuantLib using high resolution time grid
+    high_res_steps = max(time_step_range) * 10  # 10x resolution
+    benchmark_option = get_quantlib_option(S0, K, r, T, sigma, high_res_steps, option_type,
                                            exercise_type, barrier_level)
     benchmark_price = benchmark_option.NPV()
 
@@ -89,8 +92,9 @@ def plot_error_heatmap(S0, K, r, T, sigma, time_step_range, path_range, option_t
     # Initialize a matrix to hold the absolute error for each (time step, path) pair
     error_matrix = np.zeros((len(path_range), len(time_step_range)))
 
-    # Calculate the benchmark option price using QuantLib
-    benchmark_option = get_quantlib_option(S0, K, r, T, sigma, max(time_step_range), option_type, exercise_type, barrier_level)
+    # Calculate the benchmark option price using QuantLib using high resolution time grid
+    high_res_steps = max(time_step_range) * 10  # Increase resolution for accuracy
+    benchmark_option = get_quantlib_option(S0, K, r, T, sigma, high_res_steps, option_type, exercise_type, barrier_level)
     benchmark_price = benchmark_option.NPV()
 
     # Fill the error matrix with absolute errors
@@ -115,13 +119,13 @@ def plot_error_heatmap(S0, K, r, T, sigma, time_step_range, path_range, option_t
     plt.colorbar(c, label='Absolute Error')
 
     # Highlight the minimum combination of time steps and paths
-    plt.scatter(min_n_time_steps, min_n_paths, color='red', s=100, edgecolor='black', marker='*',
-                label=f'Minimum Absolute Error\nTimeSteps={min_n_time_steps}, MCPathNbr={min_n_paths}')
+    plt.scatter(min_n_time_steps, min_n_paths, color='red', s=200, edgecolor='black', marker='*',
+                label=f'Minimum Absolute Error\nTimeSteps={min_n_time_steps}, Paths={min_n_paths}')
 
     # Set ticks to match the tested points and add grid lines
     plt.xticks(time_step_range, rotation=45)
     plt.yticks(path_range)
-    plt.grid(visible=True, color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+    plt.grid(visible=True, color='black', linestyle='--', linewidth=0.5, alpha=0.5)
 
     # Labels and title
     plt.xlabel("Number of Time Steps")
