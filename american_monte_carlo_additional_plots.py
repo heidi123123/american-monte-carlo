@@ -15,6 +15,8 @@ def plot_asset_paths(paths, T, n_time_steps, n_paths_to_plot=100):
     plt.title("Simulated Asset Price Paths")
     plt.xlabel("Time to Maturity (Years)")
     plt.ylabel("Asset Price")
+    plt.grid()
+    plt.tight_layout()
     plt.show()
 
 
@@ -140,7 +142,7 @@ def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option
 
     plt.figure(figsize=(12, 8))
     color_map = {'Chebyshev': "royalblue", 'Power': "forestgreen", 'Legendre': "darkorange"}
-    markers = {'Chebyshev': "o", 'Power': "s", 'Legendre': "^"}
+    marker_map = {'Chebyshev': "o", 'Power': "s", 'Legendre': "^"}
 
     for basis_type in ["Chebyshev", "Power", "Legendre"]:
         lsmc_prices = []
@@ -150,7 +152,7 @@ def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option
             lsmc_prices.append(lsmc_price)
 
         plt.plot(degrees, lsmc_prices, label=f"{basis_type} Basis",
-                 color=color_map[basis_type], marker=markers[basis_type],
+                 color=color_map[basis_type], marker=marker_map[basis_type],
                  linewidth=2, markersize=6)
 
     # Benchmark line
