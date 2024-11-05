@@ -279,9 +279,6 @@ def main():
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
     plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K])
-    print(f"option_values: {option_values}")
-    print(f"continuation_values: {continuation_values}")
-    print(f"paths_cropped: {paths_cropped}")
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(
@@ -304,13 +301,13 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 5  # Number of time steps for grid (resolution of simulation)
+    n_time_steps = 50  # Number of time steps for grid (resolution of simulation)
     n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
     exercise_type = "American"
-    n_plotted_paths = 1
+    n_plotted_paths = 5
     barrier_level = None
     basis_type = "Chebyshev"
     degree = 4
