@@ -80,9 +80,9 @@ def intrinsic_value(S, K, option_type="Call"):
 
 
 # Define exercise dates based on option type
-def get_exercise_dates(exercise_type, n_time_steps):
+def get_early_exercise_dates(exercise_type, n_time_steps):
     if exercise_type == "European":
-        return [n_time_steps - 1]
+        return []
     elif exercise_type == "American":
         return np.arange(1, n_time_steps)
 
@@ -186,8 +186,8 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     else:
         barrier_hit = np.ones_like(paths, dtype=bool)
 
-    # Set exercise dates
-    exercise_dates = get_exercise_dates(exercise_type, n_time_steps)
+    # Set early exercise dates
+    early_exercise_dates = get_early_exercise_dates(exercise_type, n_time_steps)
     option_values, continuation_values = [], []
 
     for t in reversed(range(n_time_steps + 1)):
@@ -197,7 +197,7 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
             # At maturity, pay intrinsic value if barrier has been hit
             cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
             exercise_times[barrier_hit_t] = t
-        elif t in exercise_dates:
+        elif t in early_exercise_dates:
             update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values,
                              continuation_values, option_type, barrier_hit_t, basis_type, degree)
 
@@ -287,15 +287,15 @@ if __name__ == "__main__":
     S0 = 100  # Initial stock price
     K = 100  # Strike price
     T = 1.0  # Maturity in years
-    r = 0.05  # Risk-free rate
+    r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 100  # Number of time steps for grid (resolution of simulation)
+    n_time_steps = 50  # Number of time steps for grid (resolution of simulation)
     n_paths = 1000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
     exercise_type = "European"
-    n_plotted_paths = 6
+    n_plotted_paths = 4
     barrier_level = 0.8 * S0
     basis_type = "Chebyshev"
     degree = 4
