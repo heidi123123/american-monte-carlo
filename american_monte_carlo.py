@@ -92,13 +92,19 @@ def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_value
                      barrier_hit_t, basis_type, degree):
     in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
     valid_paths = barrier_hit_t & in_the_money
-    X, Y = paths[valid_paths, t], cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
+    valid_paths_indices = np.where(valid_paths)[0]
+    X = paths[valid_paths, t]
+    Y = cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
 
     if len(X) > 0:
         continuation_estimated = regression_estimate(X, Y, basis_type, degree)
         exercise_value = intrinsic_value(X, K, option_type)
-        apply_exercise(cashflows, exercise_times, np.where(valid_paths)[0], exercise_value, continuation_estimated, t)
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values, continuation_estimated)
+        apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value, continuation_estimated, t)
+        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
+                            continuation_estimated, valid_paths_indices)
+    else:
+        # No in-the-money paths; store zeros
+        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
 
 # Generate basis polynomials based on the selected basis type
@@ -128,12 +134,18 @@ def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, 
 
 
 # Store option and continuation values during LSMC backward iteration
-def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
+def store_option_values(t, stock_prices, cashflows, option_values, continuation_values,
+                        continuation_estimated=None, valid_paths_indices=None):
     option_values.append((t, stock_prices, cashflows))
-    if continuation_estimated is not None:
-        continuation_values.append((t, stock_prices, continuation_estimated))
+    if continuation_estimated is not None and valid_paths_indices is not None:
+        # Initialize continuation values with zeros
+        cont_values = np.zeros_like(stock_prices)
+        # Assign estimated continuation values to the correct indices
+        cont_values[valid_paths_indices] = continuation_estimated
+        continuation_values.append((t, stock_prices, cont_values))
     else:
-        continuation_values.append((t, stock_prices, cashflows))
+        # If no continuation estimate, store zeros or cashflows
+        continuation_values.append((t, stock_prices, np.zeros_like(stock_prices)))
 
 
 # Plot LSMC process with option and continuation values
@@ -267,6 +279,9 @@ def main():
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
     plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K])
+    print(f"option_values: {option_values}")
+    print(f"continuation_values: {continuation_values}")
+    print(f"paths_cropped: {paths_cropped}")
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(
@@ -289,14 +304,14 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 50  # Number of time steps for grid (resolution of simulation)
-    n_paths = 1000  # Number of Monte Carlo paths
+    n_time_steps = 5  # Number of time steps for grid (resolution of simulation)
+    n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
-    exercise_type = "European"
-    n_plotted_paths = 4
-    barrier_level = 0.8 * S0
+    exercise_type = "American"
+    n_plotted_paths = 1
+    barrier_level = None
     basis_type = "Chebyshev"
     degree = 4
     main()
