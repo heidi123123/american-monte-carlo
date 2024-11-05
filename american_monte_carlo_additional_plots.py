@@ -1,5 +1,6 @@
-import matplotlib as plt
-from american_monte_carlo import *
+import matplotlib.pyplot as plt
+import numpy as np
+from american_monte_carlo import generate_asset_paths, get_quantlib_option, lsmc_option_pricing
 
 
 def plot_asset_paths(paths, T, n_time_steps, n_paths_to_plot=100):
