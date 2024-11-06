@@ -210,15 +210,15 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     for t in reversed(range(n_time_steps + 1)):
         barrier_hit_t = barrier_hit[:, t]
 
-        if t == n_time_steps:
-            # At maturity, pay intrinsic value if barrier has been hit
+        if t == n_time_steps:  # at t = T = maturity
             cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
             exercise_times[barrier_hit_t] = t
+            store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
         elif t in early_exercise_dates:
             update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values,
                              continuation_values, option_type, barrier_hit_t, basis_type, degree)
-
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
+        else:
+            store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
     # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
