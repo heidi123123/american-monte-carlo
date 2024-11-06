@@ -227,6 +227,28 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     return option_price, option_values, continuation_values
 
 
+# PLot annotations of option / continuation values
+def plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax):
+    for s, v in zip(stock_prices, option_vals):
+        # Dynamically calculate QuantLib option price at each step
+        ql_option = get_quantlib_option(
+            S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
+            n_steps=len(time_steps), option_type=option_type,
+            exercise_type=exercise_type, barrier_level=barrier_level
+        )
+        ql_price = ql_option.NPV()
+
+        # Annotate LSMC and QuantLib prices on the plot
+        ax.annotate(f"{v:.2f}", (T_step, s), ha='right', va='bottom', fontsize=6, color="black", rotation=30)
+        ax.annotate(f"{ql_price:.2f}", (T_step, s), ha='right', va='top', fontsize=6, color="red", rotation=30)
+
+    # Setting text color individually
+    ax.text(0.02, 0.98, "LSMC Prices", transform=ax.transAxes,
+            fontsize=7, color="black", verticalalignment='top')
+    ax.text(0.02, 0.96, "QuantLib Prices", transform=ax.transAxes,
+            fontsize=7, color="red", verticalalignment='top')
+
+
 # Plot value scatter plots with labels and gridlines
 def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, plot_values):
     cmap = cm.viridis
@@ -243,10 +265,8 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
             x_values = np.full(len(stock_prices), T_step)
 
             sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
-
             if plot_values:
-                for s, v in zip(stock_prices, option_vals):
-                    ax.annotate(f"{v:.2f}", (T_step, s), ha='right', va='bottom', fontsize=6, color="black", rotation=30)
+                plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax)
 
     ax.set_title(title)
     ax.set_xlabel("Time to Maturity (T)")
@@ -280,7 +300,7 @@ def main():
     option_values, continuation_values, paths_cropped = crop_data(
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
-    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=True)
+    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=plot_values)
     print(f"option_values: {option_values}")
     print(f"continuation_values: {continuation_values}")
     print(f"paths_cropped: {paths_cropped}")
