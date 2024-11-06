@@ -1,42 +1,42 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import QuantLib as ql
+import QuantLib as Ql
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 
 # Set up the QuantLib engine based on exercise type
 def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European", barrier_level=None):
-    calendar = ql.NullCalendar()
-    day_count = ql.Actual365Fixed()
-    today = ql.Date().todaysDate()
-    ql.Settings.instance().evaluationDate = today
+    calendar = Ql.NullCalendar()
+    day_count = Ql.Actual365Fixed()
+    today = Ql.Date().todaysDate()
+    Ql.Settings.instance().evaluationDate = today
 
-    spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
-    flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(today, r, day_count))
-    vol_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(today, calendar, sigma, day_count))
-    process = ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
+    spot_handle = Ql.QuoteHandle(Ql.SimpleQuote(S0))
+    flat_ts = Ql.YieldTermStructureHandle(Ql.FlatForward(today, r, day_count))
+    vol_ts = Ql.BlackVolTermStructureHandle(Ql.BlackConstantVol(today, calendar, sigma, day_count))
+    process = Ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
 
     # Exercise and engine setup functions
     def european_exercise_and_engine():
-        exercise = ql.EuropeanExercise(today + int(T * 365))
-        engine = ql.AnalyticEuropeanEngine(process)
+        exercise = Ql.EuropeanExercise(today + int(T * 365))
+        engine = Ql.AnalyticEuropeanEngine(process)
         return exercise, engine
 
     def american_exercise_and_engine():
-        exercise = ql.AmericanExercise(today, today + int(T * 365))
-        engine = ql.BinomialVanillaEngine(process, "crr", n_steps)
+        exercise = Ql.AmericanExercise(today, today + int(T * 365))
+        engine = Ql.BinomialVanillaEngine(process, "crr", n_steps)
         return exercise, engine
 
     # Barrier option handling
     if barrier_level is not None:
         # Use the specified exercise type
         if exercise_type == "European":
-            exercise = ql.EuropeanExercise(today + int(T * 365))
-            engine = ql.AnalyticBarrierEngine(process)
+            exercise = Ql.EuropeanExercise(today + int(T * 365))
+            engine = Ql.AnalyticBarrierEngine(process)
         elif exercise_type == "American":
-            exercise = ql.AmericanExercise(today, today + int(T * 365))
-            engine = ql.BinomialBarrierEngine(process, "crr", n_steps)
+            exercise = Ql.AmericanExercise(today, today + int(T * 365))
+            engine = Ql.BinomialBarrierEngine(process, "crr", n_steps)
         else:
             raise NotImplementedError("Barrier options with this exercise type are not implemented.")
         return exercise, engine
@@ -52,13 +52,13 @@ def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European"
 # Generate QuantLib option for comparison
 def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercise_type="European", barrier_level=None):
     exercise, engine = setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type, barrier_level)
-    option_type = ql.Option.Put if option_type == "Put" else ql.Option.Call
-    payoff = ql.PlainVanillaPayoff(option_type, K)
+    option_type = Ql.Option.Put if option_type == "Put" else Ql.Option.Call
+    payoff = Ql.PlainVanillaPayoff(option_type, K)
     if barrier_level is not None:
-        barrier_type = ql.Barrier.DownIn
-        option = ql.BarrierOption(barrier_type, barrier_level, 0.0, payoff, exercise)
+        barrier_type = Ql.Barrier.DownIn
+        option = Ql.BarrierOption(barrier_type, barrier_level, 0.0, payoff, exercise)
     else:
-        option = ql.VanillaOption(payoff, exercise)
+        option = Ql.VanillaOption(payoff, exercise)
     option.setPricingEngine(engine)
     return option
 
@@ -116,7 +116,7 @@ def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_value
 def get_basis_polynomials(X, basis_type, degree):
     basis_func_map = {"Power": lambda X, i: X ** i,
                       "Chebyshev": lambda X, i: np.polynomial.chebyshev.chebval(X, [0] * i + [1]),
-                      "Legendre": lambda X, i: np.polynomial.legendre.legval(X, [0] * i + [1]),}
+                      "Legendre": lambda X, i: np.polynomial.legendre.legval(X, [0] * i + [1])}
 
     if basis_type not in basis_func_map:
         raise ValueError(f"Unknown basis type '{basis_type}'. Use 'Power', 'Chebyshev', or 'Legendre'.")
@@ -231,18 +231,18 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
 def plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax):
     for s, v in zip(stock_prices, option_vals):
         # Dynamically calculate QuantLib option price at each step
-        ql_option = get_quantlib_option(
+        Ql_option = get_quantlib_option(
             S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
             n_steps=len(time_steps), option_type=option_type,
             exercise_type=exercise_type, barrier_level=barrier_level
         )
-        ql_price = ql_option.NPV()
+        Ql_price = Ql_option.NPV()
 
         # Annotate LSMC and QuantLib prices on the plot
         ax.annotate(f"{v:.2f}", (T_step, s), ha='right', va='bottom', fontsize=6, color="black", rotation=30)
-        ax.annotate(f"{ql_price:.2f}", (T_step, s), ha='right', va='top', fontsize=6, color="red", rotation=30)
+        ax.annotate(f"{Ql_price:.2f}", (T_step, s), ha='right', va='top', fontsize=6, color="red", rotation=30)
 
-    # Setting text color individually
+    # Legend via text boxes
     ax.text(0.02, 0.98, "LSMC Prices", transform=ax.transAxes,
             fontsize=7, color="black", verticalalignment='top')
     ax.text(0.02, 0.96, "QuantLib Prices", transform=ax.transAxes,
@@ -263,8 +263,7 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
         T_step = t * dt
         if len(stock_prices) == len(option_vals):
             x_values = np.full(len(stock_prices), T_step)
-
-            sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
+            ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
             if plot_values:
                 plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax)
 
