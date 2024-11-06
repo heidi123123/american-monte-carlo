@@ -67,10 +67,15 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercis
 def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
     dt = T / n_time_steps
     Z = np.random.normal(size=(n_paths, n_time_steps))
-    growth_factor = (r - 0.5 * sigma ** 2) * dt
-    diffusion_factor = sigma * np.sqrt(dt) * Z
-    paths = np.exp(growth_factor + diffusion_factor).cumprod(axis=1) * S0
-    paths[:, 0] = S0
+    growth_factor = (r - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * Z
+    increments = np.exp(growth_factor)
+
+    # Initialize paths array with shape (n_paths, n_time_steps + 1)
+    paths = np.zeros((n_paths, n_time_steps + 1))
+    paths[:, 0] = S0  # Set initial asset price at time zero
+
+    # Calculate asset prices for each time step
+    paths[:, 1:] = S0 * np.cumprod(increments, axis=1)
     return paths
 
 
@@ -275,7 +280,10 @@ def main():
     option_values, continuation_values, paths_cropped = crop_data(
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
-    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=plot_values)
+    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=True)
+    print(f"option_values: {option_values}")
+    print(f"continuation_values: {continuation_values}")
+    print(f"paths_cropped: {paths_cropped}")
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(
@@ -298,8 +306,8 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 50  # Number of time steps for grid (resolution of simulation)
-    n_paths = 10000  # Number of Monte Carlo paths
+    n_time_steps = 5  # Number of time steps for grid (NOT including S_0)
+    n_paths = 5000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
