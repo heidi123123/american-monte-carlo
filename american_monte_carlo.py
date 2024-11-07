@@ -187,17 +187,14 @@ def check_barrier_hit(paths, barrier_level, barrier_hit, t):
 # Estimate continuation values, applying regression onto asset paths
 def estimate_continuation_values(paths, t, K, r, dt, cashflows, exercise_times, option_type,
                                  barrier_hit_t, basis_type, degree):
-    valid_paths = barrier_hit_t
-    valid_paths_indices = np.where(valid_paths)[0]
-
-    X = paths[valid_paths, t]
-    Y = cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
+    X = paths[:, t]
+    Y = cashflows * np.exp(-r * dt * (exercise_times - t))
 
     continuation_estimated = np.zeros(paths.shape[0])
     if len(X) > 0:
         estimated_values = regression_estimate(X, Y, basis_type, degree)
         estimated_values = np.maximum(estimated_values, 0)  # floor continuation values at zero
-        continuation_estimated[valid_paths_indices] = estimated_values
+        continuation_estimated = estimated_values
     return continuation_estimated
 
 
@@ -354,17 +351,17 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 5  # Number of time steps for grid (NOT including S_0)
-    n_paths = 5000  # Number of Monte Carlo paths
+    n_time_steps = 200  # Number of time steps for grid (NOT including S_0)
+    n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
     exercise_type = "European"
-    n_plotted_paths = 5
-    barrier_level = None
+    n_plotted_paths = 8
+    barrier_level = 0.8 * S0
     basis_type = "Chebyshev"
     degree = 4
 
-    plot_values = True
+    plot_values = False
 
     main()
