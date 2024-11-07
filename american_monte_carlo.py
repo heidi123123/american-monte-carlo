@@ -139,8 +139,7 @@ def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, 
 
 
 # Store option and continuation values during LSMC backward iteration
-def store_option_values(t, stock_prices, cashflows, option_values, continuation_values,
-                        continuation_estimated=None):
+def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
     option_values.append((t, stock_prices.copy(), cashflows.copy()))
     if continuation_estimated is not None:
         continuation_values.append((t, stock_prices.copy(), continuation_estimated.copy()))
@@ -185,8 +184,7 @@ def check_barrier_hit(paths, barrier_level, barrier_hit, t):
 
 
 # Estimate continuation values, applying regression onto asset paths
-def estimate_continuation_values(paths, t, K, r, dt, cashflows, exercise_times, option_type,
-                                 barrier_hit_t, basis_type, degree):
+def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, basis_type, degree):
     X = paths[:, t]
     Y = cashflows * np.exp(-r * dt * (exercise_times - t))
 
@@ -227,10 +225,8 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
             exercise_times[barrier_hit_t] = t
         else:
             # Estimate continuation values at every time step
-            continuation_estimated = estimate_continuation_values(
-                paths, t, K, r, dt, cashflows, exercise_times, option_type,
-                barrier_hit_t, basis_type, degree
-            )
+            continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
+                                                                  basis_type, degree)
 
             # Apply exercise decision only at exercise dates
             if t in early_exercise_dates:
