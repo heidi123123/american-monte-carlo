@@ -108,7 +108,7 @@ def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_value
         store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
                             continuation_estimated, valid_paths_indices)
     else:
-        # No in-the-money paths; store zeros
+        # No in-the-money or knocked-in paths --> store zeros
         store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
 
 
@@ -149,7 +149,7 @@ def store_option_values(t, stock_prices, cashflows, option_values, continuation_
         cont_values[valid_paths_indices] = continuation_estimated
         continuation_values.append((t, stock_prices, cont_values))
     else:
-        # If no continuation estimate, store zeros or cashflows
+        # If no continuation estimate, store zeros
         continuation_values.append((t, stock_prices, np.zeros_like(stock_prices)))
 
 
@@ -330,7 +330,7 @@ if __name__ == "__main__":
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
-    exercise_type = "American"
+    exercise_type = "European"
     n_plotted_paths = 5
     barrier_level = None
     basis_type = "Chebyshev"
