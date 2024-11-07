@@ -332,9 +332,6 @@ def main():
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
     plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=plot_values)
-    print(f"option_values: {option_values}")
-    print(f"continuation_values: {continuation_values}")
-    print(f"paths_cropped: {paths_cropped}")
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(
