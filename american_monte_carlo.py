@@ -252,16 +252,19 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     return option_price, option_values, continuation_values
 
 
-# PLot annotations of option / continuation values
+# Plot annotations of option / continuation values
 def plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax):
     for s, v in zip(stock_prices, option_vals):
-        # Dynamically calculate QuantLib option price at each step
-        Ql_option = get_quantlib_option(
-            S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
-            n_steps=len(time_steps), option_type=option_type,
-            exercise_type=exercise_type, barrier_level=barrier_level
-        )
-        Ql_price = Ql_option.NPV()
+        try:
+            # Dynamically calculate QuantLib option price at each step
+            Ql_option = get_quantlib_option(S0=s, K=K, r=r, T=T - T_step, sigma=sigma, n_steps=len(time_steps),
+                                            option_type=option_type, exercise_type=exercise_type,
+                                            barrier_level=barrier_level)
+            Ql_price = Ql_option.NPV()
+        except RuntimeError:
+            Ql_option = get_quantlib_option(S0=s, K=K, r=r, T=T - T_step, sigma=sigma, n_steps=len(time_steps),
+                                            option_type=option_type, exercise_type=exercise_type)
+            Ql_price = Ql_option.NPV()
 
         # Annotate LSMC and QuantLib prices on the plot
         ax.annotate(f"{v:.2f}", (T_step, s), ha='right', va='bottom', fontsize=6, color="black", rotation=30)
@@ -347,17 +350,17 @@ if __name__ == "__main__":
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 200  # Number of time steps for grid (NOT including S_0)
+    n_time_steps = 4  # Number of time steps for grid (NOT including S_0)
     n_paths = 10000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
     exercise_type = "European"
-    n_plotted_paths = 8
+    n_plotted_paths = 6
     barrier_level = 0.8 * S0
     basis_type = "Chebyshev"
     degree = 4
 
-    plot_values = False
+    plot_values = True
 
     main()
