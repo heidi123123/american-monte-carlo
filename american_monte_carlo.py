@@ -184,22 +184,20 @@ def check_barrier_hit(paths, barrier_level, barrier_hit, t):
     return barrier_hit
 
 
-# Function
+# Estimate continuation values, applying regression onto asset paths
 def estimate_continuation_values(paths, t, K, r, dt, cashflows, exercise_times, option_type,
                                  barrier_hit_t, basis_type, degree):
-    in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
-    valid_paths = barrier_hit_t & in_the_money
+    valid_paths = barrier_hit_t
     valid_paths_indices = np.where(valid_paths)[0]
 
     X = paths[valid_paths, t]
     Y = cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
 
     continuation_estimated = np.zeros(paths.shape[0])
-
     if len(X) > 0:
         estimated_values = regression_estimate(X, Y, basis_type, degree)
+        estimated_values = np.maximum(estimated_values, 0)  # floor continuation values at zero
         continuation_estimated[valid_paths_indices] = estimated_values
-
     return continuation_estimated
 
 
