@@ -85,7 +85,7 @@ def intrinsic_value(S, K, option_type="Call"):
 
 
 # Define exercise dates based on option type
-def get_early_exercise_dates(exercise_type, n_time_steps):
+def get_early_exercise_times(exercise_type, n_time_steps):
     if exercise_type == "European":
         return []
     elif exercise_type == "American":
@@ -196,6 +196,39 @@ def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, bas
     return continuation_estimated
 
 
+# Perform the backward iteration of American Monte Carlo procedure
+def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
+                               early_exercise_times, option_values, continuation_values, basis_type, degree):
+    for t in reversed(range(n_time_steps + 1)):
+        barrier_hit_t = barrier_hit[:, t]
+
+        # Initialize continuation_estimated for this time step
+        continuation_estimated = np.zeros(paths.shape[0])
+
+        if t == n_time_steps:  # At maturity
+            cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
+            exercise_times[barrier_hit_t] = t
+        else:
+            # Estimate continuation values at every time step
+            continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
+                                                                  basis_type, degree)
+
+            # Apply exercise decision only at exercise dates
+            if t in early_exercise_times:
+                in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
+                valid_paths = barrier_hit_t & in_the_money
+                valid_paths_indices = np.where(valid_paths)[0]
+                X = paths[valid_paths, t]
+                exercise_value = intrinsic_value(X, K, option_type)
+                estimated_continuation = continuation_estimated[valid_paths_indices]
+                apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value,
+                               estimated_continuation, t)
+
+        # Store option and continuation values for plotting
+        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
+                            continuation_estimated)
+
+
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
 def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
                         exercise_type="European", basis_type="Chebyshev", degree=3):
@@ -211,37 +244,10 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
         barrier_hit = np.ones_like(paths, dtype=bool)
 
     # Set early exercise dates
-    early_exercise_dates = get_early_exercise_dates(exercise_type, n_time_steps)
+    early_exercise_times = get_early_exercise_times(exercise_type, n_time_steps)
     option_values, continuation_values = [], []
-
-    for t in reversed(range(n_time_steps + 1)):
-        barrier_hit_t = barrier_hit[:, t]
-
-        # Initialize continuation_estimated for this time step
-        continuation_estimated = np.zeros(n_paths)
-
-        if t == n_time_steps:  # At maturity
-            cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
-            exercise_times[barrier_hit_t] = t
-        else:
-            # Estimate continuation values at every time step
-            continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
-                                                                  basis_type, degree)
-
-            # Apply exercise decision only at exercise dates
-            if t in early_exercise_dates:
-                in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
-                valid_paths = barrier_hit_t & in_the_money
-                valid_paths_indices = np.where(valid_paths)[0]
-                X = paths[valid_paths, t]
-                exercise_value = intrinsic_value(X, K, option_type)
-                estimated_continuation = continuation_estimated[valid_paths_indices]
-                apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value,
-                               estimated_continuation, t)
-
-        # Store option and continuation values for plotting
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
-                            continuation_estimated)
+    perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
+                               early_exercise_times, option_values, continuation_values, basis_type, degree)
 
     # Reverse the stored values for correct time ordering
     option_values.reverse()
