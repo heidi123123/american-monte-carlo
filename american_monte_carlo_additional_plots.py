@@ -138,7 +138,7 @@ def plot_error_heatmap(S0, K, r, T, sigma, time_step_range, path_range, option_t
 
 def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option_type, exercise_type, barrier_level,
                                max_degree):
-    degrees = range(1, max_degree + 1)
+    degrees = range(0, max_degree + 1)
     benchmark_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
     benchmark_price = benchmark_option.NPV()
 
@@ -185,8 +185,7 @@ if __name__ == "__main__":
 
     option_type = "Put"
     exercise_type = "American"
-    n_plotted_paths = 6
-    barrier_level = 0.8 * S0
+    barrier_level = None
     basis_type = "Chebyshev"
     degree = 4
 
