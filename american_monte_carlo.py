@@ -92,6 +92,13 @@ def get_early_exercise_times(exercise_type, n_time_steps):
         return np.arange(1, n_time_steps)
 
 
+# Apply exercise if intrinsic value > continuation value
+def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
+    exercise = exercise_value > continuation_estimated
+    selected_idx = in_the_money_idx[exercise]
+    cashflows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
+
+
 # Update cashflows based on regression of continuation values
 def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type,
                      barrier_hit_t, basis_type, degree):
@@ -131,13 +138,6 @@ def regression_estimate(X, Y, basis_type="Power", degree=3):
     return A @ coeffs
 
 
-# Apply exercise if intrinsic value > continuation value
-def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
-    exercise = exercise_value > continuation_estimated
-    selected_idx = in_the_money_idx[exercise]
-    cashflows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
-
-
 # Store option and continuation values during LSMC backward iteration
 def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
     option_values.append((t, stock_prices.copy(), cashflows.copy()))
@@ -145,101 +145,6 @@ def store_option_values(t, stock_prices, cashflows, option_values, continuation_
         continuation_values.append((t, stock_prices.copy(), continuation_estimated.copy()))
     else:
         continuation_values.append((t, stock_prices.copy(), np.zeros_like(stock_prices)))
-
-
-# Compute differences between continuation values and QuantLib prices
-def compute_differences(continuation_values, dt, difference_type):
-    differences = []
-    for t, stock_prices, continuation_estimated in continuation_values:
-        T_step = t * dt
-        diffs = []
-        for s, cont_value in zip(stock_prices, continuation_estimated):
-            try:
-                # Dynamically calculate QuantLib option price at each step
-                Ql_option = get_quantlib_option(
-                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
-                    n_steps=n_time_steps, option_type=option_type,
-                    exercise_type=exercise_type, barrier_level=barrier_level
-                )
-                Ql_price = Ql_option.NPV()
-            except RuntimeError:
-                # If QuantLib cannot price with barrier, try without it
-                Ql_option = get_quantlib_option(
-                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
-                    n_steps=n_time_steps, option_type=option_type,
-                    exercise_type=exercise_type
-                )
-                Ql_price = Ql_option.NPV()
-            # Compute difference according to difference_type
-            if difference_type == 'absolute':
-                diff = abs(cont_value - Ql_price)
-            elif difference_type == 'difference':
-                diff = cont_value - Ql_price
-            elif difference_type == 'relative':
-                if abs(Ql_price - cont_value) < 0.0001:
-                    diff = 0
-                elif Ql_price != 0:
-                    diff = (cont_value - Ql_price) / Ql_price
-                else:  # handle division by zero
-                    diff = (cont_value - 0.0001) / 0.0001
-            else:
-                raise ValueError(f"Invalid difference_type '{difference_type}'. Must be 'absolute', 'difference', or 'relative'.")
-            diffs.append(diff)
-        differences.append((t, stock_prices, np.array(diffs)))
-    return differences
-
-
-# Plot LSMC process with option and continuation values
-def plot_lsmc_grid(option_values, continuation_values, paths, dt,
-                   key_S_lines=None, plot_asset_paths=False, plot_values=False, difference_type='difference'):
-    # Compute differences
-    differences = compute_differences(continuation_values, dt, difference_type)
-
-    # Remove NaN values before concatenation
-    all_diff_values = np.concatenate([values[~np.isnan(values)] for _, _, values in differences])
-    vmin_diff, vmax_diff = all_diff_values.min(), all_diff_values.max()
-
-    # Determine color range for continuation values
-    all_cont_values = np.concatenate([values for _, _, values in continuation_values])
-    vmin_cont, vmax_cont = all_cont_values.min(), all_cont_values.max()
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-    cmap = cm.Spectral
-
-    # Plot differences
-    plot_differences(differences, paths, dt, axes[0], f"{difference_type.title()} Differences",
-                     vmin_diff, vmax_diff, key_S_lines, plot_asset_paths, plot_values, difference_type)
-
-    # Plot continuation values
-    plot_value_scatter(continuation_values, paths, dt, axes[1], "Continuation Values",
-                       vmin_cont, vmax_cont, key_S_lines, plot_asset_paths, plot_values)
-
-    # Create normalization for colorbar
-    if difference_type == 'relative':
-        norm_diff = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin_diff, vmax=vmax_diff, base=10)
-    else:
-        norm_diff = mcolors.Normalize(vmin=vmin_diff, vmax=vmax_diff)
-
-    # Add separate colorbars for each subplot
-    sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
-    sm_diff.set_array([])
-    fig.colorbar(sm_diff, ax=axes[0], label=f"{difference_type.title()} Difference")
-
-    norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
-    sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
-    sm_cont.set_array([])
-    fig.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
-
-    plt.suptitle(f"LSMC Backward Iteration: {difference_type.title()} Differences vs Continuation Values")
-    plt.show()
-
-
-# Helper function to determine color range across both option and continuation values
-def get_color_range(option_values, continuation_values):
-    all_option_values = np.concatenate([values for _, _, values in option_values])
-    all_continuation_values = np.concatenate([values for _, _, values in continuation_values])
-    return min(all_option_values.min(), all_continuation_values.min()), max(all_option_values.max(),
-                                                                            all_continuation_values.max())
 
 
 # Function to update barrier_hit flags
@@ -325,45 +230,19 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     return option_price, option_values, continuation_values
 
 
-def plot_differences(differences, paths, dt, ax, title, vmin, vmax,
-                     key_S_lines, plot_asset_paths, plot_values, difference_type):
-    if difference_type == 'relative':
-        # Use SymLogNorm for logarithmic color scale
-        norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
-    else:
-        # Use Normalize for other difference types
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+# Crop option_values and continuation_values to the first n_plotted_paths
+def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
+    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cashflows[:n_plotted_paths])
+                             for t, stock_prices, cashflows in option_values]
 
-    cmap = cm.Spectral
-    time_steps = [t * dt for t in range(len(paths[0]))]
+    cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
+                                   for t, stock_prices, continuation in continuation_values]
 
-    if plot_asset_paths:
-        for path in paths:
-            ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
-
-    # Plot the differences
-    for t, stock_prices, diff_values in differences:
-        T_step = t * dt
-        if len(stock_prices) == len(diff_values):
-            x_values = np.full(len(stock_prices), T_step)
-            sc = ax.scatter(x_values, stock_prices, c=diff_values, cmap=cmap, s=30, marker='o', norm=norm)
-            if plot_values:
-                # Optionally annotate the differences
-                for s_val, diff in zip(stock_prices, diff_values):
-                    if not np.isnan(diff):
-                        ax.annotate(f"{diff:.2f}", (T_step, s_val), ha='right', va='bottom',
-                                    fontsize=6, color="black", rotation=30)
-
-    ax.set_title(title)
-    ax.set_xlabel("Time to Maturity (T)")
-    if key_S_lines:
-        for s_line in key_S_lines:
-            ax.axhline(s_line, color='gray', linestyle='-', linewidth=0.8)
-    for t_line in time_steps:
-        ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
+    cropped_paths = paths[:n_plotted_paths]
+    return cropped_option_values, cropped_continuation_values, cropped_paths
 
 
-# Plot annotations of option / continuation values
+# Plot annotations of continuation values
 def plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax):
     for s, v in zip(stock_prices, option_vals):
         try:
@@ -415,16 +294,130 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
         ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
 
 
-# Crop option_values and continuation_values to the first n_plotted_paths
-def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
-    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cashflows[:n_plotted_paths])
-                             for t, stock_prices, cashflows in option_values]
+# Compute differences between continuation values and QuantLib prices
+def compute_differences(continuation_values, dt, difference_type):
+    differences = []
+    for t, stock_prices, continuation_estimated in continuation_values:
+        T_step = t * dt
+        diffs = []
+        for s, cont_value in zip(stock_prices, continuation_estimated):
+            try:
+                # Dynamically calculate QuantLib option price at each step
+                Ql_option = get_quantlib_option(
+                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
+                    n_steps=n_time_steps, option_type=option_type,
+                    exercise_type=exercise_type, barrier_level=barrier_level
+                )
+                Ql_price = Ql_option.NPV()
+            except RuntimeError:
+                # If QuantLib cannot price with barrier, try without it
+                Ql_option = get_quantlib_option(
+                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
+                    n_steps=n_time_steps, option_type=option_type,
+                    exercise_type=exercise_type
+                )
+                Ql_price = Ql_option.NPV()
+            # Compute difference according to difference_type
+            if difference_type == 'absolute':
+                diff = abs(cont_value - Ql_price)
+            elif difference_type == 'difference':
+                diff = cont_value - Ql_price
+            elif difference_type == 'relative':
+                if abs(Ql_price - cont_value) < 0.0001:
+                    diff = 0
+                elif Ql_price != 0:
+                    diff = (cont_value - Ql_price) / Ql_price
+                else:  # handle division by zero
+                    diff = (cont_value - 0.0001) / 0.0001
+            else:
+                raise ValueError(f"Invalid difference_type '{difference_type}'. Must be 'absolute', 'difference', or 'relative'.")
+            diffs.append(diff)
+        differences.append((t, stock_prices, np.array(diffs)))
+    return differences
 
-    cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
-                                   for t, stock_prices, continuation in continuation_values]
 
-    cropped_paths = paths[:n_plotted_paths]
-    return cropped_option_values, cropped_continuation_values, cropped_paths
+# Plot differences of benchmark Quantlib option price and continuation value
+def plot_differences(differences, paths, dt, ax, title, vmin, vmax,
+                     key_S_lines, plot_asset_paths, plot_values, difference_type):
+    if difference_type == 'relative':
+        # Use SymLogNorm for logarithmic color scale
+        norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
+    else:
+        # Use Normalize for other difference types
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    cmap = cm.Spectral
+    time_steps = [t * dt for t in range(len(paths[0]))]
+
+    if plot_asset_paths:
+        for path in paths:
+            ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
+
+    # Plot the differences
+    for t, stock_prices, diff_values in differences:
+        T_step = t * dt
+        if len(stock_prices) == len(diff_values):
+            x_values = np.full(len(stock_prices), T_step)
+            sc = ax.scatter(x_values, stock_prices, c=diff_values, cmap=cmap, s=30, marker='o', norm=norm)
+            if plot_values:
+                # Optionally annotate the differences
+                for s_val, diff in zip(stock_prices, diff_values):
+                    if not np.isnan(diff):
+                        ax.annotate(f"{diff:.2f}", (T_step, s_val), ha='right', va='bottom',
+                                    fontsize=6, color="black", rotation=30)
+
+    ax.set_title(title)
+    ax.set_xlabel("Time to Maturity (T)")
+    if key_S_lines:
+        for s_line in key_S_lines:
+            ax.axhline(s_line, color='gray', linestyle='-', linewidth=0.8)
+    for t_line in time_steps:
+        ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
+
+
+# Plot LSMC process with option and continuation values
+def plot_lsmc_grid(option_values, continuation_values, paths, dt,
+                   key_S_lines=None, plot_asset_paths=False, plot_values=False, difference_type='difference'):
+    # Compute differences
+    differences = compute_differences(continuation_values, dt, difference_type)
+
+    # Remove NaN values before concatenation
+    all_diff_values = np.concatenate([values[~np.isnan(values)] for _, _, values in differences])
+    vmin_diff, vmax_diff = all_diff_values.min(), all_diff_values.max()
+
+    # Determine color range for continuation values
+    all_cont_values = np.concatenate([values for _, _, values in continuation_values])
+    vmin_cont, vmax_cont = all_cont_values.min(), all_cont_values.max()
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    cmap = cm.Spectral
+
+    # Plot differences
+    plot_differences(differences, paths, dt, axes[0], f"{difference_type.title()} Differences",
+                     vmin_diff, vmax_diff, key_S_lines, plot_asset_paths, plot_values, difference_type)
+
+    # Plot continuation values
+    plot_value_scatter(continuation_values, paths, dt, axes[1], "Continuation Values",
+                       vmin_cont, vmax_cont, key_S_lines, plot_asset_paths, plot_values)
+
+    # Create normalization for colorbar
+    if difference_type == 'relative':
+        norm_diff = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin_diff, vmax=vmax_diff, base=10)
+    else:
+        norm_diff = mcolors.Normalize(vmin=vmin_diff, vmax=vmax_diff)
+
+    # Add separate colorbars for each subplot
+    sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
+    sm_diff.set_array([])
+    fig.colorbar(sm_diff, ax=axes[0], label=f"{difference_type.title()} Difference")
+
+    norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
+    sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
+    sm_cont.set_array([])
+    fig.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
+
+    plt.suptitle(f"LSMC Backward Iteration: {difference_type.title()} Differences vs Continuation Values")
+    plt.show()
 
 
 # Main function to run LSMC and plot results
@@ -470,7 +463,7 @@ if __name__ == "__main__":
     n_plotted_paths = 1000
     barrier_level = 80
     basis_type = "Chebyshev"
-    degree = 4
+    degree = 5
 
     plot_values = False
 
