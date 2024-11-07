@@ -180,7 +180,7 @@ if __name__ == "__main__":
     r = 0.05  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
     n_time_steps = 100  # Number of time steps for grid (resolution of simulation)
-    n_paths = 1000  # Number of Monte Carlo paths
+    n_paths = 5000  # Number of Monte Carlo paths
     dt = T / n_time_steps  # Time step size for simulation
 
     option_type = "Put"
@@ -195,15 +195,7 @@ if __name__ == "__main__":
                                max_degree=10)
 
     path_range = [500, 1000, 3000, 5000, 7000, 10000]
-    plot_convergence_with_paths(S0=S0, K=K, r=r, T=T, sigma=sigma, n_time_steps=n_time_steps,
-                                option_type=option_type, exercise_type=exercise_type, barrier_level=barrier_level,
-                                path_range=path_range, basis_type=basis_type, degree=degree)
-
     time_step_range = [5, 10, 50, 100, 150, 250]
-    plot_convergence_with_time_steps(S0=S0, K=K, r=r, T=T, sigma=sigma, n_paths=n_paths,
-                                     option_type=option_type, exercise_type=exercise_type, barrier_level=barrier_level,
-                                     time_step_range=time_step_range, basis_type=basis_type, degree=degree)
-
     plot_error_heatmap(S0=S0, K=K, r=r, T=T, sigma=sigma, time_step_range=time_step_range, path_range=path_range,
                        option_type=option_type, exercise_type=exercise_type, barrier_level=barrier_level,
                        basis_type=basis_type, degree=degree)
