@@ -289,7 +289,7 @@ def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, pl
     ax.set_xlabel("Time to Maturity (T)")
     if key_S_lines:
         for s in key_S_lines:
-            ax.axhline(s, color='gray', linestyle='-', linewidth=0.8)
+            ax.axhline(s, color='gray', linestyle='--', linewidth=0.8)
     for t_line in time_steps:
         ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
 
@@ -370,13 +370,13 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax,
     ax.set_xlabel("Time to Maturity (T)")
     if key_S_lines:
         for s_line in key_S_lines:
-            ax.axhline(s_line, color='gray', linestyle='-', linewidth=0.8)
+            ax.axhline(s_line, color='gray', linestyle='--', linewidth=0.8)
     for t_line in time_steps:
         ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
 
 
 # Plot LSMC process with option and continuation values
-def plot_lsmc_grid(option_values, continuation_values, paths, dt,
+def plot_lsmc_grid(continuation_values, paths, dt,
                    key_S_lines=None, plot_asset_paths=False, plot_values=False, difference_type='difference'):
     # Compute differences
     differences = compute_differences(continuation_values, dt, difference_type)
@@ -431,7 +431,8 @@ def main():
     option_values, continuation_values, paths_cropped = crop_data(
         option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
     )
-    plot_lsmc_grid(option_values, continuation_values, paths_cropped, dt, key_S_lines=[S0, K], plot_values=plot_values)
+    key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
+    plot_lsmc_grid(continuation_values, paths_cropped, dt, key_S_lines=key_S_lines, plot_values=plot_values)
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(
@@ -463,7 +464,7 @@ if __name__ == "__main__":
     n_plotted_paths = 1000
     barrier_level = 80
     basis_type = "Chebyshev"
-    degree = 5
+    degree = 6
 
     plot_values = False
 
