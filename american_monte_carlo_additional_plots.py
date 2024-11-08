@@ -32,8 +32,8 @@ def plot_convergence_with_paths(S0, K, r, T, sigma, n_time_steps, option_type, e
     dt = T / n_time_steps
     for n_paths in n_paths_list:
         paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-        lsmc_price, _, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
-                                               basis_type, degree)
+        lsmc_price, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
+                                            basis_type, degree)
         lsmc_prices.append(lsmc_price)
 
     plt.figure(figsize=(12, 8))
@@ -66,8 +66,8 @@ def plot_convergence_with_time_steps(S0, K, r, T, sigma, n_paths, option_type, e
     for n_time_steps in time_step_range:
         dt = T / n_time_steps
         paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-        lsmc_price, _, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
-                                               basis_type, degree)
+        lsmc_price, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
+                                            basis_type, degree)
         lsmc_prices.append(lsmc_price)
 
     plt.figure(figsize=(12, 8))
@@ -102,8 +102,8 @@ def plot_error_heatmap(S0, K, r, T, sigma, time_step_range, path_range, option_t
         for j, n_time_steps in enumerate(time_step_range):
             dt = T / n_time_steps
             paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-            lsmc_price, _, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
-                                                   basis_type=basis_type, degree=degree)
+            lsmc_price, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
+                                                basis_type=basis_type, degree=degree)
             # Store the absolute error in the matrix
             error_matrix[i, j] = abs(lsmc_price - benchmark_price)
 
@@ -151,8 +151,8 @@ def plot_error_vs_basis_degree(S0, K, r, T, sigma, n_time_steps, n_paths, option
     for basis_type in ["Chebyshev", "Power", "Legendre"]:
         lsmc_prices = []
         for degree in degrees:
-            lsmc_price, _, _ = lsmc_option_pricing(paths, K, r, T / n_time_steps, option_type, barrier_level,
-                                                   exercise_type, basis_type=basis_type, degree=degree)
+            lsmc_price, _ = lsmc_option_pricing(paths, K, r, T / n_time_steps, option_type, barrier_level,
+                                                exercise_type, basis_type=basis_type, degree=degree)
             lsmc_prices.append(lsmc_price)
 
         plt.plot(degrees, lsmc_prices, label=f"{basis_type} Basis",

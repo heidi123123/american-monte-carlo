@@ -1,49 +1,48 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import QuantLib as Ql
+import QuantLib as ql
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 
-# Set up the QuantLib engine based on exercise type
+# Set up the QuantLib exercise and engine based on exercise type and barrier level
 def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European", barrier_level=None):
-    calendar = Ql.NullCalendar()
-    day_count = Ql.Actual365Fixed()
-    today = Ql.Date().todaysDate()
-    Ql.Settings.instance().evaluationDate = today
+    calendar = ql.NullCalendar()
+    day_count = ql.Actual365Fixed()
+    today = ql.Date().todaysDate()
+    ql.Settings.instance().evaluationDate = today
 
-    spot_handle = Ql.QuoteHandle(Ql.SimpleQuote(S0))
-    flat_ts = Ql.YieldTermStructureHandle(Ql.FlatForward(today, r, day_count))
-    vol_ts = Ql.BlackVolTermStructureHandle(Ql.BlackConstantVol(today, calendar, sigma, day_count))
-    process = Ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
+    spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
+    flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(today, r, day_count))
+    vol_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(today, calendar, sigma, day_count))
+    process = ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
 
     # Exercise and engine setup functions
     def european_exercise_and_engine():
-        exercise = Ql.EuropeanExercise(today + int(T * 365))
-        engine = Ql.AnalyticEuropeanEngine(process)
+        exercise = ql.EuropeanExercise(today + int(T * 365))
+        engine = ql.AnalyticEuropeanEngine(process)
         return exercise, engine
 
     def american_exercise_and_engine():
-        exercise = Ql.AmericanExercise(today, today + int(T * 365))
-        engine = Ql.BinomialVanillaEngine(process, "crr", n_steps)
+        exercise = ql.AmericanExercise(today, today + int(T * 365))
+        engine = ql.BinomialVanillaEngine(process, "crr", n_steps)
         return exercise, engine
 
     # Barrier option handling
     if barrier_level is not None:
-        # Use the specified exercise type
         if exercise_type == "European":
-            exercise = Ql.EuropeanExercise(today + int(T * 365))
-            engine = Ql.AnalyticBarrierEngine(process)
+            exercise = ql.EuropeanExercise(today + int(T * 365))
+            engine = ql.AnalyticBarrierEngine(process)
         elif exercise_type == "American":
-            exercise = Ql.AmericanExercise(today, today + int(T * 365))
-            engine = Ql.BinomialBarrierEngine(process, "crr", n_steps)
+            exercise = ql.AmericanExercise(today, today + int(T * 365))
+            engine = ql.BinomialBarrierEngine(process, "crr", n_steps)
         else:
             raise NotImplementedError("Barrier options with this exercise type are not implemented.")
         return exercise, engine
 
     exercise_map = {
         "European": european_exercise_and_engine,
-        "American": american_exercise_and_engine
+        "American": american_exercise_and_engine,
     }
 
     return exercise_map[exercise_type]()
@@ -52,13 +51,13 @@ def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European"
 # Generate QuantLib option for comparison
 def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercise_type="European", barrier_level=None):
     exercise, engine = setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type, barrier_level)
-    option_type = Ql.Option.Put if option_type == "Put" else Ql.Option.Call
-    payoff = Ql.PlainVanillaPayoff(option_type, K)
+    option_type_ql = ql.Option.Put if option_type == "Put" else ql.Option.Call
+    payoff = ql.PlainVanillaPayoff(option_type_ql, K)
     if barrier_level is not None:
-        barrier_type = Ql.Barrier.DownIn
-        option = Ql.BarrierOption(barrier_type, barrier_level, 0.0, payoff, exercise)
+        barrier_type = ql.Barrier.DownIn
+        option = ql.BarrierOption(barrier_type, barrier_level, 0.0, payoff, exercise)
     else:
-        option = Ql.VanillaOption(payoff, exercise)
+        option = ql.VanillaOption(payoff, exercise)
     option.setPricingEngine(engine)
     return option
 
@@ -70,11 +69,8 @@ def generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths):
     growth_factor = (r - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * Z
     increments = np.exp(growth_factor)
 
-    # Initialize paths array with shape (n_paths, n_time_steps + 1)
     paths = np.zeros((n_paths, n_time_steps + 1))
-    paths[:, 0] = S0  # Set initial asset price at time zero
-
-    # Calculate asset prices for each time step
+    paths[:, 0] = S0
     paths[:, 1:] = S0 * np.cumprod(increments, axis=1)
     return paths
 
@@ -96,27 +92,8 @@ def get_early_exercise_times(exercise_type, n_time_steps):
 def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
     exercise = exercise_value > continuation_estimated
     selected_idx = in_the_money_idx[exercise]
-    cashflows[selected_idx], exercise_times[selected_idx] = exercise_value[exercise], t
-
-
-# Update cashflows based on regression of continuation values
-def update_cashflows(paths, t, K, r, dt, cashflows, exercise_times, option_values, continuation_values, option_type,
-                     barrier_hit_t, basis_type, degree):
-    in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
-    valid_paths = barrier_hit_t & in_the_money
-    valid_paths_indices = np.where(valid_paths)[0]
-    X = paths[valid_paths, t]
-    Y = cashflows[valid_paths] * np.exp(-r * dt * (exercise_times[valid_paths] - t))
-
-    if len(X) > 0:
-        continuation_estimated = regression_estimate(X, Y, basis_type, degree)
-        exercise_value = intrinsic_value(X, K, option_type)
-        apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value, continuation_estimated, t)
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
-                            continuation_estimated, valid_paths_indices)
-    else:
-        # No in-the-money or knocked-in paths --> store zeros
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values)
+    cashflows[selected_idx] = exercise_value[exercise]
+    exercise_times[selected_idx] = t
 
 
 # Generate basis polynomials based on the selected basis type
@@ -138,38 +115,22 @@ def regression_estimate(X, Y, basis_type="Power", degree=3):
     return A @ coeffs
 
 
-# Store option and continuation values during LSMC backward iteration
-def store_option_values(t, stock_prices, cashflows, option_values, continuation_values, continuation_estimated=None):
-    option_values.append((t, stock_prices.copy(), cashflows.copy()))
-    if continuation_estimated is not None:
-        continuation_values.append((t, stock_prices.copy(), continuation_estimated.copy()))
-    else:
-        continuation_values.append((t, stock_prices.copy(), np.zeros_like(stock_prices)))
-
-
-# Function to update barrier_hit flags
-def check_barrier_hit(paths, barrier_level, barrier_hit, t):
-    new_breaches = paths[:, t] <= barrier_level
-    barrier_hit |= new_breaches
-    return barrier_hit
-
-
 # Estimate continuation values, applying regression onto asset paths
 def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, basis_type, degree):
     X = paths[:, t]
     Y = cashflows * np.exp(-r * dt * (exercise_times - t))
 
-    continuation_estimated = np.zeros(paths.shape[0])
     if len(X) > 0:
         estimated_values = regression_estimate(X, Y, basis_type, degree)
-        estimated_values = np.maximum(estimated_values, 0)  # floor continuation values at zero
-        continuation_estimated = estimated_values
+        continuation_estimated = np.maximum(estimated_values, 0)
+    else:
+        continuation_estimated = np.zeros(paths.shape[0])
     return continuation_estimated
 
 
 # Perform the backward iteration of American Monte Carlo procedure
 def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               early_exercise_times, option_values, continuation_values, basis_type, degree):
+                               early_exercise_times, continuation_values, basis_type, degree):
     for t in reversed(range(n_time_steps + 1)):
         barrier_hit_t = barrier_hit[:, t]
 
@@ -180,11 +141,9 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
             cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
             exercise_times[barrier_hit_t] = t
         else:
-            # Estimate continuation values at every time step
             continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
                                                                   basis_type, degree)
 
-            # Apply exercise decision only at exercise dates
             if t in early_exercise_times:
                 in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
                 valid_paths = barrier_hit_t & in_the_money
@@ -195,14 +154,15 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
                 apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value,
                                estimated_continuation, t)
 
-        # Store option and continuation values for plotting
-        store_option_values(t, paths[:, t], cashflows, option_values, continuation_values,
-                            continuation_estimated)
+        continuation_values.append((t, paths[:, t].copy(), continuation_estimated.copy()))
+
+    # Reverse the stored values for correct time ordering
+    continuation_values.reverse()
 
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
 def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
-                        exercise_type="European", basis_type="Chebyshev", degree=3):
+                        exercise_type="European", basis_type="Chebyshev", degree=4):
     n_paths, n_time_steps_plus_one = paths.shape
     n_time_steps = n_time_steps_plus_one - 1
     cashflows = np.zeros(n_paths)
@@ -214,119 +174,58 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     else:
         barrier_hit = np.ones_like(paths, dtype=bool)
 
-    # Set early exercise dates
     early_exercise_times = get_early_exercise_times(exercise_type, n_time_steps)
-    option_values, continuation_values = [], []
+    continuation_values = []
 
     perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               early_exercise_times, option_values, continuation_values, basis_type, degree)
-
-    # Reverse the stored values for correct time ordering
-    option_values.reverse()
-    continuation_values.reverse()
+                               early_exercise_times, continuation_values, basis_type, degree)
 
     # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
-    return option_price, option_values, continuation_values
+    return option_price, continuation_values
 
 
-# Crop option_values and continuation_values to the first n_plotted_paths
-def crop_data(option_values, continuation_values, paths, n_plotted_paths=10):
-    cropped_option_values = [(t, stock_prices[:n_plotted_paths], cashflows[:n_plotted_paths])
-                             for t, stock_prices, cashflows in option_values]
-
+# Crop continuation_values to the first n_plotted_paths for plotting
+def crop_data(continuation_values, paths, n_plotted_paths=10):
     cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
                                    for t, stock_prices, continuation in continuation_values]
 
     cropped_paths = paths[:n_plotted_paths]
-    return cropped_option_values, cropped_continuation_values, cropped_paths
-
-
-# Plot annotations of continuation values
-def plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax):
-    for s, v in zip(stock_prices, option_vals):
-        try:
-            # Dynamically calculate QuantLib option price at each step
-            Ql_option = get_quantlib_option(S0=s, K=K, r=r, T=T - T_step, sigma=sigma, n_steps=len(time_steps),
-                                            option_type=option_type, exercise_type=exercise_type,
-                                            barrier_level=barrier_level)
-            Ql_price = Ql_option.NPV()
-        except RuntimeError:
-            Ql_option = get_quantlib_option(S0=s, K=K, r=r, T=T - T_step, sigma=sigma, n_steps=len(time_steps),
-                                            option_type=option_type, exercise_type=exercise_type)
-            Ql_price = Ql_option.NPV()
-
-        # Annotate LSMC and QuantLib prices on the plot
-        ax.annotate(f"{v:.2f}", (T_step, s), ha='right', va='bottom', fontsize=10, color="black", rotation=30)
-        ax.annotate(f"{Ql_price:.2f}", (T_step, s), ha='right', va='top', fontsize=10, color="red", rotation=30)
-
-    # Legend via text boxes
-    ax.text(0.02, 0.98, "LSMC Prices", transform=ax.transAxes,
-            fontsize=7, color="black", verticalalignment='top')
-    ax.text(0.02, 0.96, "QuantLib Prices", transform=ax.transAxes,
-            fontsize=7, color="red", verticalalignment='top')
-
-
-# Plot value scatter plots with labels and gridlines
-def plot_value_scatter(values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, plot_values):
-    cmap = cm.Spectral
-    time_steps = [t * dt for t in range(len(paths[0]))]
-
-    if plot_asset_paths:
-        for path in paths:
-            ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
-
-    # Iterate over time steps and plot option values
-    for t, stock_prices, option_vals in values:
-        T_step = t * dt
-        if len(stock_prices) == len(option_vals):
-            x_values = np.full(len(stock_prices), T_step)
-            sc = ax.scatter(x_values, stock_prices, c=option_vals, cmap=cmap, s=30, marker='o', vmin=vmin, vmax=vmax)
-            if plot_values:
-                plot_annotated_option_values(stock_prices, option_vals, T_step, time_steps, ax)
-
-    ax.set_title(title)
-    ax.set_xlabel("Time to Maturity (T)")
-    if key_S_lines:
-        for s in key_S_lines:
-            ax.axhline(s, color='gray', linestyle='--', linewidth=0.8)
-    for t_line in time_steps:
-        ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
+    return cropped_continuation_values, cropped_paths
 
 
 # Compute differences between continuation values and QuantLib prices
-def compute_differences(continuation_values, dt, difference_type):
+def compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps, option_type,
+                        exercise_type, barrier_level):
     differences = []
     for t, stock_prices, continuation_estimated in continuation_values:
         T_step = t * dt
         diffs = []
         for s, cont_value in zip(stock_prices, continuation_estimated):
             try:
-                # Dynamically calculate QuantLib option price at each step
-                Ql_option = get_quantlib_option(
+                ql_option = get_quantlib_option(
                     S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
                     n_steps=n_time_steps, option_type=option_type,
                     exercise_type=exercise_type, barrier_level=barrier_level
                 )
-                Ql_price = Ql_option.NPV()
-            except RuntimeError:
-                # If QuantLib cannot price with barrier, try without it
-                Ql_option = get_quantlib_option(
+                ql_price = ql_option.NPV()
+            except RuntimeError:  # occurs when the barrier was knocked
+                ql_option = get_quantlib_option(
                     S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
                     n_steps=n_time_steps, option_type=option_type,
                     exercise_type=exercise_type
                 )
-                Ql_price = Ql_option.NPV()
+                ql_price = ql_option.NPV()
             # Compute difference according to difference_type
             if difference_type == 'absolute':
-                diff = abs(cont_value - Ql_price)
+                diff = abs(cont_value - ql_price)
             elif difference_type == 'difference':
-                diff = cont_value - Ql_price
+                diff = cont_value - ql_price
             elif difference_type == 'relative':
-                if abs(Ql_price - cont_value) < 0.0001:
+                if abs(ql_price - cont_value) < 0.0001:
                     diff = 0
-                elif Ql_price != 0:
-                    diff = (cont_value - Ql_price) / Ql_price
+                elif ql_price != 0:
+                    diff = (cont_value - ql_price) / ql_price
                 else:  # handle division by zero
                     diff = (cont_value - 0.0001) / 0.0001
             else:
@@ -336,15 +235,14 @@ def compute_differences(continuation_values, dt, difference_type):
     return differences
 
 
-# Plot differences of benchmark Quantlib option price and continuation value
-def plot_differences(differences, paths, dt, ax, title, vmin, vmax,
-                     key_S_lines, plot_asset_paths, plot_values, difference_type):
-    if difference_type == 'relative':
-        # Use SymLogNorm for logarithmic color scale
-        norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
-    else:
-        # Use Normalize for other difference types
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+# Plot differences between LSMC and QuantLib prices
+def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, difference_type,
+                     norm=None):
+    if norm is None:
+        if difference_type == "relative":
+            norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
+        else:
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
     cmap = cm.Spectral
     time_steps = [t * dt for t in range(len(paths[0]))]
@@ -353,33 +251,67 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax,
         for path in paths:
             ax.plot(time_steps, path, color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
 
-    # Plot the differences
     for t, stock_prices, diff_values in differences:
         T_step = t * dt
         if len(stock_prices) == len(diff_values):
             x_values = np.full(len(stock_prices), T_step)
-            sc = ax.scatter(x_values, stock_prices, c=diff_values, cmap=cmap, s=30, marker='o', norm=norm)
-            if plot_values:
-                # Optionally annotate the differences
-                for s_val, diff in zip(stock_prices, diff_values):
-                    if not np.isnan(diff):
-                        ax.annotate(f"{diff:.2f}", (T_step, s_val), ha='right', va='bottom',
-                                    fontsize=6, color="black", rotation=30)
+            ax.scatter(x_values, stock_prices, c=diff_values, cmap=cmap, s=30, marker="o", norm=norm)
 
     ax.set_title(title)
     ax.set_xlabel("Time to Maturity (T)")
     if key_S_lines:
         for s_line in key_S_lines:
-            ax.axhline(s_line, color='gray', linestyle='--', linewidth=0.8)
+            ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
     for t_line in time_steps:
-        ax.axvline(t_line, color='gray', linestyle='--', linewidth=0.5)
+        ax.axvline(t_line, color="gray", linestyle="--", linewidth=0.5)
 
 
-# Plot LSMC process with option and continuation values
-def plot_lsmc_grid(continuation_values, paths, dt,
-                   key_S_lines=None, plot_asset_paths=False, plot_values=False, difference_type='difference'):
+# Plot continuation values as a scatter plot
+def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths):
+    cmap = cm.Spectral
+    time_steps = [t * dt for t in range(len(paths[0]))]
+
+    if plot_asset_paths:
+        for path in paths:
+            ax.plot(
+                time_steps,
+                path,
+                color="gray",
+                linestyle="-",
+                linewidth=0.5,
+                alpha=0.3,
+            )
+
+    for t, stock_prices, cont_values in continuation_values:
+        T_step = t * dt
+        if len(stock_prices) == len(cont_values):
+            x_values = np.full(len(stock_prices), T_step)
+            ax.scatter(
+                x_values,
+                stock_prices,
+                c=cont_values,
+                cmap=cmap,
+                s=30,
+                marker="o",
+                vmin=vmin,
+                vmax=vmax,
+            )
+
+    ax.set_title(title)
+    ax.set_xlabel("Time to Maturity (T)")
+    if key_S_lines:
+        for s_line in key_S_lines:
+            ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
+    for t_line in time_steps:
+        ax.axvline(t_line, color="gray", linestyle="--", linewidth=0.5)
+
+
+# Plot the LSMC process with continuation values and differences
+def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
+                      barrier_level, key_S_lines=None, plot_asset_paths=False, difference_type="difference"):
     # Compute differences
-    differences = compute_differences(continuation_values, dt, difference_type)
+    differences = compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps,
+                                      option_type, exercise_type, barrier_level)
 
     # Remove NaN values before concatenation
     all_diff_values = np.concatenate([values[~np.isnan(values)] for _, _, values in differences])
@@ -392,25 +324,25 @@ def plot_lsmc_grid(continuation_values, paths, dt,
     fig, axes = plt.subplots(1, 2, figsize=(16, 8))
     cmap = cm.Spectral
 
-    # Plot differences
-    plot_differences(differences, paths, dt, axes[0], f"{difference_type.title()} Differences",
-                     vmin_diff, vmax_diff, key_S_lines, plot_asset_paths, plot_values, difference_type)
-
-    # Plot continuation values
-    plot_value_scatter(continuation_values, paths, dt, axes[1], "Continuation Values",
-                       vmin_cont, vmax_cont, key_S_lines, plot_asset_paths, plot_values)
-
-    # Create normalization for colorbar
-    if difference_type == 'relative':
+    if difference_type == "relative":
         norm_diff = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin_diff, vmax=vmax_diff, base=10)
     else:
         norm_diff = mcolors.Normalize(vmin=vmin_diff, vmax=vmax_diff)
 
-    # Add separate colorbars for each subplot
+    plot_title = f"{difference_type.title()} Differences to QuantLib" if difference_type != "difference" else "Differences to QuantLib"
+
+    plot_differences(differences, paths, dt, axes[0], plot_title, vmin_diff, vmax_diff,
+                     key_S_lines, plot_asset_paths, difference_type, norm=norm_diff)
+
+    plot_continuation_values(continuation_values, paths, dt, axes[1], "Continuation Values", vmin_cont, vmax_cont,
+                             key_S_lines, plot_asset_paths)
+
+    # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
     sm_diff.set_array([])
     fig.colorbar(sm_diff, ax=axes[0], label=f"{difference_type.title()} Difference")
 
+    # Add color bar for continuation values
     norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
     sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
     sm_cont.set_array([])
@@ -424,23 +356,17 @@ def plot_lsmc_grid(continuation_values, paths, dt,
 def main():
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
 
-    lsmc_price, option_values, continuation_values = lsmc_option_pricing(
-        paths, K, r, dt, option_type, barrier_level, exercise_type, basis_type, degree
-    )
+    lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
+                                                          basis_type, degree)
 
-    option_values, continuation_values, paths_cropped = crop_data(
-        option_values, continuation_values, paths, min(n_plotted_paths, n_paths)
-    )
+    cont_values_cropped, paths_cropped = crop_data(continuation_values, paths, min(n_plotted_paths, n_paths))
     key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
-    plot_lsmc_grid(continuation_values, paths_cropped, dt, key_S_lines=key_S_lines, plot_values=plot_values)
+    plot_lsmc_results(cont_values_cropped, paths_cropped, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
+                      barrier_level, key_S_lines=key_S_lines, plot_asset_paths=False, difference_type=difference_type)
 
     # Compare LSMC with QuantLib
-    quantlib_barrier_option = get_quantlib_option(
-        S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level
-    )
-    quantlib_option = get_quantlib_option(
-        S0, K, r, T, sigma, n_time_steps, option_type, exercise_type
-    )
+    quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
+    quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type)
     barrier_pct = barrier_level / S0 * 100 if barrier_level else None
     option_description = f"{exercise_type} {option_type}"
     print(f"{option_description} Option Price with {barrier_pct}% Barrier (LSMC): {lsmc_price:.4f}")
@@ -450,22 +376,22 @@ def main():
 
 if __name__ == "__main__":
     np.random.seed(42)
-    S0 = 90  # Initial stock price
+    S0 = 95  # Initial stock price
     K = 100  # Strike price
     T = 1.0  # Maturity in years
     r = 0.01  # Risk-free rate
     sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 100  # Number of time steps for grid (NOT including S_0)
-    n_paths = 10000  # Number of Monte Carlo paths
-    dt = T / n_time_steps  # Time step size for simulation
+    n_time_steps = 100  # Number of time steps (excluding S0)
+    n_paths = 1000  # Number of Monte Carlo paths
+    dt = T / n_time_steps  # Time step size
 
     option_type = "Put"
     exercise_type = "European"
     n_plotted_paths = 1000
     barrier_level = 80
     basis_type = "Chebyshev"
-    degree = 6
+    degree = 4
 
-    plot_values = False
+    difference_type = "difference"
 
     main()
