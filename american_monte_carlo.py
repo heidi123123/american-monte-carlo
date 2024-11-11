@@ -190,6 +190,25 @@ def crop_data(continuation_values, paths, n_plotted_paths=10):
     return cropped_continuation_values, cropped_paths
 
 
+# Get comparable QuantLib option for each time step and asset path
+def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, n_time_steps, option_type, exercise_type,
+                                             barrier_level):
+    try:
+        ql_option = get_quantlib_option(
+            S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
+            n_steps=n_time_steps, option_type=option_type,
+            exercise_type=exercise_type, barrier_level=barrier_level
+        )
+        return ql_option.NPV()
+    except RuntimeError:  # occurs when the barrier was knocked
+        ql_option = get_quantlib_option(
+            S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
+            n_steps=n_time_steps, option_type=option_type,
+            exercise_type=exercise_type
+        )
+        return ql_option.NPV()
+
+
 # Compute differences between continuation values and QuantLib prices
 def compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps, option_type,
                         exercise_type, barrier_level):
@@ -198,20 +217,8 @@ def compute_differences(continuation_values, dt, difference_type, K, r, T, sigma
         T_step = t * dt
         diffs = []
         for s, cont_value in zip(stock_prices, continuation_estimated):
-            try:
-                ql_option = get_quantlib_option(
-                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
-                    n_steps=n_time_steps, option_type=option_type,
-                    exercise_type=exercise_type, barrier_level=barrier_level
-                )
-                ql_price = ql_option.NPV()
-            except RuntimeError:  # occurs when the barrier was knocked
-                ql_option = get_quantlib_option(
-                    S0=s, K=K, r=r, T=T - T_step, sigma=sigma,
-                    n_steps=n_time_steps, option_type=option_type,
-                    exercise_type=exercise_type
-                )
-                ql_price = ql_option.NPV()
+            ql_price = get_quantlib_option_price_for_grid_point(s, K, r, T, T_step, sigma, n_time_steps, option_type,
+                                                                exercise_type, barrier_level)
             # Compute difference according to difference_type
             if difference_type == 'absolute':
                 diff = abs(cont_value - ql_price)
@@ -416,19 +423,23 @@ def main(params):
 
 if __name__ == "__main__":
     params = {
-        "S0": 95,               # Initial stock price
-        "K": 100,               # Strike price
-        "T": 1.0,               # Maturity in years
-        "r": 0.01,              # Risk-free rate
-        "sigma": 0.2,           # Volatility of the underlying stock
-        "n_time_steps": 10,     # Number of time steps (excluding S0)
-        "n_paths": 1000,        # Number of Monte Carlo paths
-        "option_type": "Put",   # Option type
+        # Underlying asset path settings
+        "S0": 95,  # Initial stock price
+        "K": 100,  # Strike price
+        "T": 1.0,  # Maturity in years
+        "r": 0.01,  # Risk-free rate
+        "sigma": 0.2,  # Volatility of the underlying stock
+        "n_time_steps": 100,  # Number of time steps (excluding S0)
+        "n_paths": 10000,  # Number of Monte Carlo paths
+        # Payoff settings
+        "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
-        "n_plotted_paths": 1000,
         "barrier_level": 80,    # Barrier level
+        # Regression settings
         "basis_type": "Chebyshev",
         "degree": 4,
+        # Plot settings
+        "n_plotted_paths": 100,
         "difference_type": "difference",
         "vmin_diff": None,
         "vmax_diff": None
