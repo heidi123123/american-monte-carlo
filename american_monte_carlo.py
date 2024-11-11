@@ -373,7 +373,6 @@ def main(params):
     sigma = params['sigma']
     n_time_steps = params['n_time_steps']
     n_paths = params['n_paths']
-    dt = params['dt']
     option_type = params['option_type']
     exercise_type = params['exercise_type']
     n_plotted_paths = params['n_plotted_paths']
@@ -388,6 +387,7 @@ def main(params):
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
 
     # Perform LSMC pricing
+    dt = T / n_time_steps
     lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level,
                                                           exercise_type, basis_type, degree)
 
@@ -421,9 +421,8 @@ if __name__ == "__main__":
         "T": 1.0,               # Maturity in years
         "r": 0.01,              # Risk-free rate
         "sigma": 0.2,           # Volatility of the underlying stock
-        "n_time_steps": 100,    # Number of time steps (excluding S0)
+        "n_time_steps": 10,     # Number of time steps (excluding S0)
         "n_paths": 1000,        # Number of Monte Carlo paths
-        "dt": 1.0 / 100,        # Time step size
         "option_type": "Put",   # Option type
         "exercise_type": "European",  # Exercise type
         "n_plotted_paths": 1000,
