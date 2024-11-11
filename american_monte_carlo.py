@@ -235,9 +235,15 @@ def compute_differences(continuation_values, dt, difference_type, K, r, T, sigma
     return differences
 
 
+# Add text box with parameters to plot
+def add_description_text_box(ax, S0, K, barrier_level):
+    textstr = f"$S_0$ = {S0}\n$K$ = {K}\nBarrier = {barrier_level}"
+    ax.text(0.05, 0.97, textstr, transform=ax.transAxes, fontsize=10, va='top', bbox=dict(facecolor='white'))
+
+
 # Plot differences between LSMC and QuantLib prices
-def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, difference_type,
-                     norm=None):
+def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths,
+                     difference_type, S0, K, barrier_level, norm=None):
     if norm is None:
         if difference_type == "relative":
             norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
@@ -264,6 +270,8 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines,
             ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
     for t_line in time_steps:
         ax.axvline(t_line, color="gray", linestyle="--", linewidth=0.5)
+
+    add_description_text_box(ax, S0, K, barrier_level)
 
 
 # Plot continuation values as a scatter plot
@@ -307,32 +315,39 @@ def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vm
 
 
 # Plot the LSMC process with continuation values and differences
-def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
-                      barrier_level, key_S_lines=None, plot_asset_paths=False, difference_type="difference"):
+def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_steps, option_type,
+                      exercise_type, barrier_level, S0, key_S_lines=None, plot_asset_paths=False,
+                      difference_type="difference", vmin_diff=None, vmax_diff=None):
     # Compute differences
     differences = compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps,
                                       option_type, exercise_type, barrier_level)
-
-    # Remove NaN values before concatenation
-    all_diff_values = np.concatenate([values[~np.isnan(values)] for _, _, values in differences])
-    vmin_diff, vmax_diff = all_diff_values.min(), all_diff_values.max()
 
     # Determine color range for continuation values
     all_cont_values = np.concatenate([values for _, _, values in continuation_values])
     vmin_cont, vmax_cont = all_cont_values.min(), all_cont_values.max()
 
+    # Determine vmin_diff and vmax_diff dynamically if not provided
+    if vmin_diff is None or vmax_diff is None:
+        all_diff_values = np.concatenate([values[~np.isnan(values)] for _, _, values in differences])
+        if vmin_diff is None:
+            vmin_diff = all_diff_values.min()
+        if vmax_diff is None:
+            vmax_diff = all_diff_values.max()
+
     fig, axes = plt.subplots(1, 2, figsize=(16, 8))
     cmap = cm.Spectral
 
+    # Create norm for differences with specified or dynamic vmin and vmax
     if difference_type == "relative":
         norm_diff = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin_diff, vmax=vmax_diff, base=10)
     else:
         norm_diff = mcolors.Normalize(vmin=vmin_diff, vmax=vmax_diff)
 
-    plot_title = f"{difference_type.title()} Differences to QuantLib" if difference_type != "difference" else "Differences to QuantLib"
+    plot_title = f"{difference_type.title()} Differences to QuantLib" \
+        if difference_type != "difference" else "Differences to QuantLib"
 
     plot_differences(differences, paths, dt, axes[0], plot_title, vmin_diff, vmax_diff,
-                     key_S_lines, plot_asset_paths, difference_type, norm=norm_diff)
+                     key_S_lines, plot_asset_paths, difference_type, S0, K, barrier_level, norm=norm_diff)
 
     plot_continuation_values(continuation_values, paths, dt, axes[1], "Continuation Values", vmin_cont, vmax_cont,
                              key_S_lines, plot_asset_paths)
@@ -340,7 +355,7 @@ def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_ste
     # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
     sm_diff.set_array([])
-    fig.colorbar(sm_diff, ax=axes[0], label=f"{difference_type.title()} Difference")
+    fig.colorbar(sm_diff, ax=axes[0], label=f"Differences to QuantLib")
 
     # Add color bar for continuation values
     norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
@@ -348,7 +363,7 @@ def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_ste
     sm_cont.set_array([])
     fig.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
 
-    plt.suptitle(f"LSMC Backward Iteration: {difference_type.title()} Differences vs Continuation Values")
+    plt.suptitle(f"LSMC Backward Iteration")
     plt.show()
 
 
@@ -362,7 +377,8 @@ def main():
     cont_values_cropped, paths_cropped = crop_data(continuation_values, paths, min(n_plotted_paths, n_paths))
     key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
     plot_lsmc_results(cont_values_cropped, paths_cropped, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
-                      barrier_level, key_S_lines=key_S_lines, plot_asset_paths=False, difference_type=difference_type)
+                      barrier_level, S0, key_S_lines=key_S_lines, plot_asset_paths=False,
+                      difference_type=difference_type, vmin_diff=vmin_diff, vmax_diff=vmax_diff)
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
@@ -393,5 +409,6 @@ if __name__ == "__main__":
     degree = 4
 
     difference_type = "difference"
+    vmin_diff, vmax_diff = None, None
 
     main()
