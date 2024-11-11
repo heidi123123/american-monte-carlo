@@ -160,23 +160,28 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
     continuation_values.reverse()
 
 
-# Perform Least Squares Monte Carlo (LSMC) with visualization data
-def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
-                        exercise_type="European", basis_type="Chebyshev", degree=4):
-    n_paths, n_time_steps_plus_one = paths.shape
-    n_time_steps = n_time_steps_plus_one - 1
-    cashflows = np.zeros(n_paths)
-    exercise_times = np.full(n_paths, n_time_steps)
-
-    # Precompute barrier hit matrix
+# Precompute barrier hit matrix
+def precompute_barrier_hit_matrix(paths, barrier_level):
     if barrier_level is not None:
         barrier_hit = np.maximum.accumulate(paths <= barrier_level, axis=1)
     else:
         barrier_hit = np.ones_like(paths, dtype=bool)
+    return barrier_hit
 
+
+# Perform Least Squares Monte Carlo (LSMC) with visualization data
+def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
+                        exercise_type="European", basis_type="Chebyshev", degree=4):
+    # Initialize LSMC
+    n_paths, n_time_steps_plus_one = paths.shape
+    n_time_steps = n_time_steps_plus_one - 1
+    cashflows = np.zeros(n_paths)
+    exercise_times = np.full(n_paths, n_time_steps)
     early_exercise_times = get_early_exercise_times(exercise_type, n_time_steps)
     continuation_values = []
+    barrier_hit = precompute_barrier_hit_matrix(paths, barrier_level)
 
+    # Backward iteration
     perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
                                early_exercise_times, continuation_values, basis_type, degree)
 
