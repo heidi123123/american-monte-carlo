@@ -368,47 +368,76 @@ def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_ste
 
 
 # Main function to run LSMC and plot results
-def main():
+def main(params):
+    # Unpack the parameters dictionary
+    S0 = params['S0']
+    K = params['K']
+    T = params['T']
+    r = params['r']
+    sigma = params['sigma']
+    n_time_steps = params['n_time_steps']
+    n_paths = params['n_paths']
+    dt = params['dt']
+    option_type = params['option_type']
+    exercise_type = params['exercise_type']
+    n_plotted_paths = params['n_plotted_paths']
+    barrier_level = params['barrier_level']
+    basis_type = params['basis_type']
+    degree = params['degree']
+    difference_type = params['difference_type']
+    vmin_diff = params['vmin_diff']
+    vmax_diff = params['vmax_diff']
+
+    # Generate asset paths
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
 
-    lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type,
-                                                          basis_type, degree)
+    # Perform LSMC pricing
+    lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level,
+                                                          exercise_type, basis_type, degree)
 
+    # Crop data for plotting
     cont_values_cropped, paths_cropped = crop_data(continuation_values, paths, min(n_plotted_paths, n_paths))
     key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
-    plot_lsmc_results(cont_values_cropped, paths_cropped, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
-                      barrier_level, S0, key_S_lines=key_S_lines, plot_asset_paths=False,
-                      difference_type=difference_type, vmin_diff=vmin_diff, vmax_diff=vmax_diff)
+
+    # Plot results
+    plot_lsmc_results(
+        cont_values_cropped, paths_cropped, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
+        barrier_level, S0, key_S_lines=key_S_lines, plot_asset_paths=False,
+        difference_type=difference_type, vmin_diff=vmin_diff, vmax_diff=vmax_diff
+    )
 
     # Compare LSMC with QuantLib
-    quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
+    quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type,
+                                                  barrier_level)
     quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type)
     option_description = f"{exercise_type} {option_type}"
     barrier_text = f"with {barrier_level}" if barrier_level else "without"
     print(f"{option_description} Option Price {barrier_text} Barrier (LSMC): {lsmc_price:.4f}")
     print(f"{option_description} Option Price {barrier_text} Barrier (QuantLib): {quantlib_barrier_option.NPV():.4f}")
-    print(f"{option_description} Option Price without Barrier (QuantLib): {quantlib_option.NPV():.4f}")
+    if barrier_level:
+        print(f"{option_description} Option Price without Barrier (QuantLib): {quantlib_option.NPV():.4f}")
 
 
 if __name__ == "__main__":
+    params = {
+        "S0": 95,               # Initial stock price
+        "K": 100,               # Strike price
+        "T": 1.0,               # Maturity in years
+        "r": 0.01,              # Risk-free rate
+        "sigma": 0.2,           # Volatility of the underlying stock
+        "n_time_steps": 100,    # Number of time steps (excluding S0)
+        "n_paths": 1000,        # Number of Monte Carlo paths
+        "dt": 1.0 / 100,        # Time step size
+        "option_type": "Put",   # Option type
+        "exercise_type": "European",  # Exercise type
+        "n_plotted_paths": 1000,
+        "barrier_level": 80,    # Barrier level
+        "basis_type": "Chebyshev",
+        "degree": 4,
+        "difference_type": "difference",
+        "vmin_diff": None,
+        "vmax_diff": None
+    }
+
     np.random.seed(42)
-    S0 = 95  # Initial stock price
-    K = 100  # Strike price
-    T = 1.0  # Maturity in years
-    r = 0.01  # Risk-free rate
-    sigma = 0.2  # Volatility of the underlying stock
-    n_time_steps = 100  # Number of time steps (excluding S0)
-    n_paths = 1000  # Number of Monte Carlo paths
-    dt = T / n_time_steps  # Time step size
-
-    option_type = "Put"
-    exercise_type = "European"
-    n_plotted_paths = 1000
-    barrier_level = 80
-    basis_type = "Chebyshev"
-    degree = 4
-
-    difference_type = "difference"
-    vmin_diff, vmax_diff = None, None
-
-    main()
+    main(params)
