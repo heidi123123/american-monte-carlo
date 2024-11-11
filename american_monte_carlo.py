@@ -385,7 +385,6 @@ def compute_ccr_exposures(continuation_values):
             pfe95 = np.nan
             epe = np.nan
         else:
-            positive_values = valid_values[valid_values > 0]
             pfe5 = np.percentile(valid_values, 5)  # PFE 5%
             pfe95 = np.percentile(valid_values, 95)  # PFE 95%
             epe = np.mean(valid_values)
