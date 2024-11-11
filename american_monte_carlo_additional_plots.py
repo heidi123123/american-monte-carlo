@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
     option_type = "Put"
     exercise_type = "American"
-    barrier_level = None
+    barrier_level = 80
     basis_type = "Chebyshev"
     degree = 4
 
@@ -192,8 +192,8 @@ if __name__ == "__main__":
                                option_type=option_type, exercise_type=exercise_type, barrier_level=barrier_level,
                                max_degree=10)
 
-    path_range = [500, 1000, 3000, 5000, 7000, 10000]
-    time_step_range = [5, 10, 50, 100, 150, 250]
+    path_range = [500, 1000, 3000, 5000, 7000, 10000, 12000]
+    time_step_range = [5, 10, 50, 100, 150, 200, 250]
     plot_error_heatmap(S0=S0, K=K, r=r, T=T, sigma=sigma, time_step_range=time_step_range, path_range=path_range,
                        option_type=option_type, exercise_type=exercise_type, barrier_level=barrier_level,
                        basis_type=basis_type, degree=degree)
