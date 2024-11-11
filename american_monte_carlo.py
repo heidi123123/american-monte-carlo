@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import QuantLib as ql
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import matplotlib.gridspec as gridspec
 
 
 # Set up the QuantLib exercise and engine based on exercise type and barrier level
@@ -268,7 +269,7 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines,
     if key_S_lines:
         for s_line in key_S_lines:
             ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
-
+    ax.grid(True)
     add_description_text_box(ax, S0, K, barrier_level)
 
 
@@ -305,15 +306,18 @@ def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vm
 
     ax.set_title(title)
     ax.set_xlabel("Time to Maturity (T)")
+
     if key_S_lines:
         for s_line in key_S_lines:
             ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
+    ax.grid(True)
 
 
 # Plot the LSMC process with continuation values and differences
-def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, difference_type="difference",
+def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_exposures, quantlib_ccr_exposures,
+                      difference_type="difference",
                       key_S_lines=None, plot_asset_paths=False, vmin_diff=None, vmax_diff=None,
-                      S0=None, K=None, barrier_level=None, axes=None):
+                      S0=None, K=None, barrier_level=None):
     # Compute differences using precomputed QuantLib values
     differences = compute_differences(continuation_values, quantlib_values, difference_type)
 
@@ -331,7 +335,18 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, differenc
 
     cmap = cm.Spectral
 
-    # Create norm for differences with specified or dynamic vmin and vmax
+    # Create figure and gridspec
+    fig = plt.figure(figsize=(16, 12))
+    gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
+
+    # Create axes
+    ax_diff = plt.subplot(gs[0, 0])
+    ax_cont = plt.subplot(gs[0, 1], sharey=ax_diff)
+    ax_ccr = plt.subplot(gs[1, 0], sharex=ax_diff)
+    # Remove the unused subplot in bottom-right
+    fig.delaxes(plt.subplot(gs[1, 1]))
+
+    # Plot differences
     if difference_type == "relative":
         norm_diff = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin_diff, vmax=vmax_diff, base=10)
     else:
@@ -340,22 +355,37 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, differenc
     plot_title = f"{difference_type.title()} Differences to QuantLib" \
         if difference_type != "difference" else "Differences to QuantLib"
 
-    plot_differences(differences, paths, dt, axes[0], plot_title, vmin_diff, vmax_diff,
+    plot_differences(differences, paths, dt, ax_diff, plot_title, vmin_diff, vmax_diff,
                      key_S_lines, plot_asset_paths, difference_type, S0, K, barrier_level, norm=norm_diff)
 
-    plot_continuation_values(continuation_values, paths, dt, axes[1], "Continuation Values", vmin_cont, vmax_cont,
+    # Plot continuation values
+    plot_continuation_values(continuation_values, paths, dt, ax_cont, "Continuation Values", vmin_cont, vmax_cont,
                              key_S_lines, plot_asset_paths)
+
+    # Plot CCR exposures
+    plot_ccr_exposures(lsmc_ccr_exposures, quantlib_ccr_exposures, dt, ax_ccr)
+
+    # Remove ticks when axes are shared
+    plt.setp(ax_cont.get_yticklabels(), visible=False)
+    plt.setp(ax_diff.get_xticklabels(), visible=False)
+
+    # Share x-axis between differences and CCR exposures plots
+    ax_ccr.get_shared_x_axes().joined(ax_ccr, ax_diff)
+    # TODO: x-axis sharing does not work
 
     # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
     sm_diff.set_array([])
-    plt.colorbar(sm_diff, ax=axes[0], label=f"Differences to QuantLib")
+    fig.colorbar(sm_diff, ax=ax_diff, label=f"Differences to QuantLib")
 
     # Add color bar for continuation values
     norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
     sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
     sm_cont.set_array([])
-    plt.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
+    fig.colorbar(sm_cont, ax=ax_cont, label="Continuation Value")
+
+    plt.tight_layout()
+    plt.show()
 
 
 # Compute QuantLib option values for every time step & asset path data point
@@ -458,25 +488,13 @@ def main(params):
                                                                             paths, min(n_plotted_paths, n_paths))
     key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
 
-    # Create subplots: 2 on top, 1 at the bottom
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    axes_flat = axes.flatten()
-
     # Plot results
     plot_lsmc_results(
         cont_values_cropped, paths_cropped, dt, quantlib_values_cropped,
+        lsmc_ccr_exposures, quantlib_ccr_exposures,
         difference_type=difference_type, key_S_lines=key_S_lines, plot_asset_paths=False,
-        vmin_diff=vmin_diff, vmax_diff=vmax_diff, S0=S0, K=K, barrier_level=barrier_level, axes=axes_flat[:2]
+        vmin_diff=vmin_diff, vmax_diff=vmax_diff, S0=S0, K=K, barrier_level=barrier_level
     )
-
-    # Plot CCR exposures at the bottom
-    plot_ccr_exposures(lsmc_ccr_exposures, quantlib_ccr_exposures, dt, ax=axes_flat[2])
-
-    # Remove the unused subplot (bottom right)
-    fig.delaxes(axes[1, 1])
-
-    plt.tight_layout()
-    plt.show()
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type,
