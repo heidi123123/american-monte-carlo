@@ -50,7 +50,7 @@ def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European"
 
 
 # Generate QuantLib option for comparison
-def get_quantlib_option(S0, K, r, T, sigma, n_steps, option_type="Call", exercise_type="European", barrier_level=None):
+def get_quantlib_option(S0, K, r, T, sigma, n_steps=100, option_type="Call", exercise_type="European", barrier_level=None):
     exercise, engine = setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type, barrier_level)
     option_type_ql = ql.Option.Put if option_type == "Put" else ql.Option.Call
     payoff = ql.PlainVanillaPayoff(option_type_ql, K)
@@ -193,19 +193,18 @@ def crop_data(continuation_values, quantlib_values, paths, n_plotted_paths=10):
 
 
 # Get comparable QuantLib option for each time step and asset path
-def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, n_time_steps, option_type, exercise_type,
-                                             barrier_level):
+def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level):
     try:
         ql_option = get_quantlib_option(
             S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
-            n_steps=max(n_time_steps, 1), option_type=option_type,
+            n_steps=100, option_type=option_type,
             exercise_type=exercise_type, barrier_level=barrier_level
         )
         return ql_option.NPV()
     except RuntimeError:  # occurs when the barrier was knocked
         ql_option = get_quantlib_option(
             S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
-            n_steps=max(n_time_steps, 1), option_type=option_type,
+            n_steps=100, option_type=option_type,
             exercise_type=exercise_type
         )
         return ql_option.NPV()
@@ -397,8 +396,7 @@ def compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type
         stock_prices = paths[:, t]
         ql_prices = np.zeros(n_paths)
         for i, S in enumerate(stock_prices):
-            ql_price = get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, n_time_steps - t,
-                                                                option_type, exercise_type, barrier_level)
+            ql_price = get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level)
             ql_prices[i] = ql_price
         quantlib_values.append((t, stock_prices.copy(), ql_prices.copy()))
     return quantlib_values
