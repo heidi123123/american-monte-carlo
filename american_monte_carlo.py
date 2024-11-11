@@ -383,10 +383,10 @@ def main():
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
     quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type)
-    barrier_pct = barrier_level / S0 * 100 if barrier_level else None
     option_description = f"{exercise_type} {option_type}"
-    print(f"{option_description} Option Price with {barrier_pct}% Barrier (LSMC): {lsmc_price:.4f}")
-    print(f"{option_description} Option Price with {barrier_pct}% Barrier (QuantLib): {quantlib_barrier_option.NPV():.4f}")
+    barrier_text = f"with {barrier_level}" if barrier_level else "without"
+    print(f"{option_description} Option Price {barrier_text} Barrier (LSMC): {lsmc_price:.4f}")
+    print(f"{option_description} Option Price {barrier_text} Barrier (QuantLib): {quantlib_barrier_option.NPV():.4f}")
     print(f"{option_description} Option Price without Barrier (QuantLib): {quantlib_option.NPV():.4f}")
 
 
