@@ -182,12 +182,13 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
 
 
 # Crop continuation_values to the first n_plotted_paths for plotting
-def crop_data(continuation_values, paths, n_plotted_paths=10):
+def crop_data(continuation_values, quantlib_values, paths, n_plotted_paths=10):
     cropped_continuation_values = [(t, stock_prices[:n_plotted_paths], continuation[:n_plotted_paths])
                                    for t, stock_prices, continuation in continuation_values]
-
+    cropped_quantlib_values = [(t, stock_prices[:n_plotted_paths], ql_prices[:n_plotted_paths])
+                               for t, stock_prices, ql_prices in quantlib_values]
     cropped_paths = paths[:n_plotted_paths]
-    return cropped_continuation_values, cropped_paths
+    return cropped_continuation_values, cropped_quantlib_values, cropped_paths
 
 
 # Get comparable QuantLib option for each time step and asset path
@@ -196,29 +197,25 @@ def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, n_time_s
     try:
         ql_option = get_quantlib_option(
             S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
-            n_steps=n_time_steps, option_type=option_type,
+            n_steps=max(n_time_steps, 1), option_type=option_type,
             exercise_type=exercise_type, barrier_level=barrier_level
         )
         return ql_option.NPV()
     except RuntimeError:  # occurs when the barrier was knocked
         ql_option = get_quantlib_option(
             S0=S, K=K, r=r, T=T - T_step, sigma=sigma,
-            n_steps=n_time_steps, option_type=option_type,
+            n_steps=max(n_time_steps, 1), option_type=option_type,
             exercise_type=exercise_type
         )
         return ql_option.NPV()
 
 
 # Compute differences between continuation values and QuantLib prices
-def compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps, option_type,
-                        exercise_type, barrier_level):
+def compute_differences(continuation_values, quantlib_values, difference_type):
     differences = []
-    for t, stock_prices, continuation_estimated in continuation_values:
-        T_step = t * dt
+    for (t, stock_prices, continuation_estimated), (_, _, ql_prices) in zip(continuation_values, quantlib_values):
         diffs = []
-        for s, cont_value in zip(stock_prices, continuation_estimated):
-            ql_price = get_quantlib_option_price_for_grid_point(s, K, r, T, T_step, sigma, n_time_steps, option_type,
-                                                                exercise_type, barrier_level)
+        for cont_value, ql_price in zip(continuation_estimated, ql_prices):
             # Compute difference according to difference_type
             if difference_type == 'absolute':
                 diff = abs(cont_value - ql_price)
@@ -271,8 +268,6 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines,
     if key_S_lines:
         for s_line in key_S_lines:
             ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
-    for t_line in time_steps:
-        ax.axvline(t_line, color="gray", linestyle="--", linewidth=0.5)
 
     add_description_text_box(ax, S0, K, barrier_level)
 
@@ -313,17 +308,14 @@ def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vm
     if key_S_lines:
         for s_line in key_S_lines:
             ax.axhline(s_line, color="gray", linestyle="--", linewidth=0.8)
-    for t_line in time_steps:
-        ax.axvline(t_line, color="gray", linestyle="--", linewidth=0.5)
 
 
 # Plot the LSMC process with continuation values and differences
-def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_steps, option_type,
-                      exercise_type, barrier_level, S0, key_S_lines=None, plot_asset_paths=False,
-                      difference_type="difference", vmin_diff=None, vmax_diff=None):
-    # Compute differences
-    differences = compute_differences(continuation_values, dt, difference_type, K, r, T, sigma, n_time_steps,
-                                      option_type, exercise_type, barrier_level)
+def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, difference_type="difference",
+                      key_S_lines=None, plot_asset_paths=False, vmin_diff=None, vmax_diff=None,
+                      S0=None, K=None, barrier_level=None, axes=None):
+    # Compute differences using precomputed QuantLib values
+    differences = compute_differences(continuation_values, quantlib_values, difference_type)
 
     # Determine color range for continuation values
     all_cont_values = np.concatenate([values for _, _, values in continuation_values])
@@ -337,7 +329,6 @@ def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_ste
         if vmax_diff is None:
             vmax_diff = all_diff_values.max()
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
     cmap = cm.Spectral
 
     # Create norm for differences with specified or dynamic vmin and vmax
@@ -358,16 +349,73 @@ def plot_lsmc_results(continuation_values, paths, dt, K, r, T, sigma, n_time_ste
     # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
     sm_diff.set_array([])
-    fig.colorbar(sm_diff, ax=axes[0], label=f"Differences to QuantLib")
+    plt.colorbar(sm_diff, ax=axes[0], label=f"Differences to QuantLib")
 
     # Add color bar for continuation values
     norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
     sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
     sm_cont.set_array([])
-    fig.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
+    plt.colorbar(sm_cont, ax=axes[1], label="Continuation Value")
 
-    plt.suptitle(f"LSMC Backward Iteration")
-    plt.show()
+
+# Compute QuantLib option values for every time step & asset path data point
+def compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level):
+    quantlib_values = []
+    n_paths = paths.shape[0]
+    for t in range(n_time_steps + 1):
+        T_step = t * dt
+        stock_prices = paths[:, t]
+        ql_prices = np.zeros(n_paths)
+        for i, S in enumerate(stock_prices):
+            ql_price = get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, n_time_steps - t,
+                                                                option_type, exercise_type, barrier_level)
+            ql_prices[i] = ql_price
+        quantlib_values.append((t, stock_prices.copy(), ql_prices.copy()))
+    return quantlib_values
+
+
+# Compute CCR exposures like PFE & EPE, returns list of tuples: (t, PFE_5, PFE_95, EPE)
+def compute_ccr_exposures(continuation_values):
+    exposures = []
+    for t, stock_prices, cont_values in continuation_values:
+        # Exclude NaN or infinite values
+        valid_values = cont_values[np.isfinite(cont_values)]
+        if len(valid_values) == 0:
+            pfe5 = np.nan
+            pfe95 = np.nan
+            epe = np.nan
+        else:
+            positive_values = valid_values[valid_values > 0]
+            pfe5 = np.percentile(valid_values, 5)  # PFE 5%
+            pfe95 = np.percentile(valid_values, 95)  # PFE 95%
+            epe = np.mean(valid_values)
+        exposures.append((t, pfe5, pfe95, epe))
+    return exposures
+
+
+# Plot the CCR exposures
+def plot_ccr_exposures(lsmc_exposures, quantlib_exposures, dt, ax):
+    time_steps = [t * dt for t, _, _, _ in lsmc_exposures]
+    lsmc_pfe5 = [pfe5 for _, pfe5, pfe95, _ in lsmc_exposures]
+    lsmc_pfe95 = [pfe95 for _, pfe5, pfe95, _ in lsmc_exposures]
+    lsmc_epe = [epe for _, _, _, epe in lsmc_exposures]
+
+    quantlib_pfe5 = [pfe5 for _, pfe5, pfe95, _ in quantlib_exposures]
+    quantlib_pfe95 = [pfe95 for _, pfe5, pfe95, _ in quantlib_exposures]
+    quantlib_epe = [epe for _, _, _, epe in quantlib_exposures]
+
+    ax.plot(time_steps, lsmc_epe, label='LSMC EPE', color='blue')
+    ax.plot(time_steps, lsmc_pfe5, label='LSMC 5-95% PFE', color='blue', marker='.')
+    ax.plot(time_steps, lsmc_pfe95, color='blue', marker='.', alpha=0.5)
+    ax.plot(time_steps, quantlib_epe, label='QuantLib EPE', color='orange')
+    ax.plot(time_steps, quantlib_pfe5, label='QuantLib 5-95% PFE', color='orange', marker='.')
+    ax.plot(time_steps, quantlib_pfe95, color='orange', marker='.', alpha=0.5)
+
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Exposure')
+    ax.set_title('Credit Exposure Profiles')
+    ax.legend()
+    ax.grid(True)
 
 
 # Main function to run LSMC and plot results
@@ -398,26 +446,48 @@ def main(params):
     lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level,
                                                           exercise_type, basis_type, degree)
 
+    # Compute QuantLib values at every grid point using all paths
+    quantlib_option_values = compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type,
+                                                     exercise_type, barrier_level)
+
+    # Compute CCR measures
+    quantlib_ccr_exposures = compute_ccr_exposures(quantlib_option_values)
+    lsmc_ccr_exposures = compute_ccr_exposures(continuation_values)
+
     # Crop data for plotting
-    cont_values_cropped, paths_cropped = crop_data(continuation_values, paths, min(n_plotted_paths, n_paths))
+    cont_values_cropped, quantlib_values_cropped, paths_cropped = crop_data(continuation_values, quantlib_option_values,
+                                                                            paths, min(n_plotted_paths, n_paths))
     key_S_lines = [S0, K, barrier_level] if barrier_level else [S0, K]
+
+    # Create subplots: 2 on top, 1 at the bottom
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    axes_flat = axes.flatten()
 
     # Plot results
     plot_lsmc_results(
-        cont_values_cropped, paths_cropped, dt, K, r, T, sigma, n_time_steps, option_type, exercise_type,
-        barrier_level, S0, key_S_lines=key_S_lines, plot_asset_paths=False,
-        difference_type=difference_type, vmin_diff=vmin_diff, vmax_diff=vmax_diff
+        cont_values_cropped, paths_cropped, dt, quantlib_values_cropped,
+        difference_type=difference_type, key_S_lines=key_S_lines, plot_asset_paths=False,
+        vmin_diff=vmin_diff, vmax_diff=vmax_diff, S0=S0, K=K, barrier_level=barrier_level, axes=axes_flat[:2]
     )
+
+    # Plot CCR exposures at the bottom
+    plot_ccr_exposures(lsmc_ccr_exposures, quantlib_ccr_exposures, dt, ax=axes_flat[2])
+
+    # Remove the unused subplot (bottom right)
+    fig.delaxes(axes[1, 1])
+
+    plt.tight_layout()
+    plt.show()
 
     # Compare LSMC with QuantLib
     quantlib_barrier_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type,
                                                   barrier_level)
-    quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type)
     option_description = f"{exercise_type} {option_type}"
-    barrier_text = f"with {barrier_level}" if barrier_level else "without"
-    print(f"{option_description} Option Price {barrier_text} Barrier (LSMC): {lsmc_price:.4f}")
-    print(f"{option_description} Option Price {barrier_text} Barrier (QuantLib): {quantlib_barrier_option.NPV():.4f}")
+    barrier_text = f"with Barrier at {barrier_level}" if barrier_level else "without Barrier"
+    print(f"{option_description} Option Price {barrier_text} (LSMC): {lsmc_price:.4f}")
+    print(f"{option_description} Option Price {barrier_text} (QuantLib): {quantlib_barrier_option.NPV():.4f}")
     if barrier_level:
+        quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type)
         print(f"{option_description} Option Price without Barrier (QuantLib): {quantlib_option.NPV():.4f}")
 
 
@@ -429,8 +499,8 @@ if __name__ == "__main__":
         "T": 1.0,  # Maturity in years
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
-        "n_time_steps": 100,  # Number of time steps (excluding S0)
-        "n_paths": 10000,  # Number of Monte Carlo paths
+        "n_time_steps": 80,  # Number of time steps (excluding S0)
+        "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
@@ -444,6 +514,5 @@ if __name__ == "__main__":
         "vmin_diff": None,
         "vmax_diff": None
     }
-
     np.random.seed(42)
     main(params)
