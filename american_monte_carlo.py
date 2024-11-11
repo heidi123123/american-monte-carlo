@@ -80,14 +80,6 @@ def intrinsic_value(S, K, option_type="Call"):
     return np.maximum(K - S, 0) if option_type == "Put" else np.maximum(S - K, 0)
 
 
-# Define exercise dates based on option type
-def get_early_exercise_times(exercise_type, n_time_steps):
-    if exercise_type == "European":
-        return []
-    elif exercise_type == "American":
-        return np.arange(1, n_time_steps)
-
-
 # Apply exercise if intrinsic value > continuation value
 def apply_exercise(cashflows, exercise_times, in_the_money_idx, exercise_value, continuation_estimated, t):
     exercise = exercise_value > continuation_estimated
@@ -130,7 +122,7 @@ def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, bas
 
 # Perform the backward iteration of American Monte Carlo procedure
 def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               early_exercise_times, continuation_values, basis_type, degree):
+                               exercise_type, continuation_values, basis_type, degree):
     for t in reversed(range(n_time_steps + 1)):
         barrier_hit_t = barrier_hit[:, t]
 
@@ -144,7 +136,7 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
             continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
                                                                   basis_type, degree)
 
-            if t in early_exercise_times:
+            if exercise_type == 'American':
                 in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
                 valid_paths = barrier_hit_t & in_the_money
                 valid_paths_indices = np.where(valid_paths)[0]
@@ -177,13 +169,12 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     n_time_steps = n_time_steps_plus_one - 1
     cashflows = np.zeros(n_paths)
     exercise_times = np.full(n_paths, n_time_steps)
-    early_exercise_times = get_early_exercise_times(exercise_type, n_time_steps)
     continuation_values = []
     barrier_hit = precompute_barrier_hit_matrix(paths, barrier_level)
 
     # Backward iteration
     perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               early_exercise_times, continuation_values, basis_type, degree)
+                               exercise_type, continuation_values, basis_type, degree)
 
     # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
