@@ -243,14 +243,13 @@ def add_description_text_box(ax, S0, K, barrier_level):
 
 # Plot differences between LSMC and QuantLib prices
 def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths,
-                     difference_type, S0, K, barrier_level, norm=None):
+                     difference_type, S0, K, barrier_level, cmap, norm=None):
     if norm is None:
         if difference_type == "relative":
             norm = mcolors.SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
         else:
             norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-    cmap = cm.Spectral
     time_steps = [t * dt for t in range(len(paths[0]))]
 
     if plot_asset_paths:
@@ -273,35 +272,18 @@ def plot_differences(differences, paths, dt, ax, title, vmin, vmax, key_S_lines,
 
 
 # Plot continuation values as a scatter plot
-def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths):
-    cmap = cm.Spectral
+def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vmax, key_S_lines, plot_asset_paths, cmap):
     time_steps = [t * dt for t in range(len(paths[0]))]
 
     if plot_asset_paths:
         for path in paths:
-            ax.plot(
-                time_steps,
-                path,
-                color="gray",
-                linestyle="-",
-                linewidth=0.5,
-                alpha=0.3,
-            )
+            ax.plot(time_steps, path, color="gray", linestyle="-", linewidth=0.5, alpha=0.3)
 
     for t, stock_prices, cont_values in continuation_values:
         T_step = t * dt
         if len(stock_prices) == len(cont_values):
             x_values = np.full(len(stock_prices), T_step)
-            ax.scatter(
-                x_values,
-                stock_prices,
-                c=cont_values,
-                cmap=cmap,
-                s=30,
-                marker="o",
-                vmin=vmin,
-                vmax=vmax,
-            )
+            ax.scatter(x_values, stock_prices, c=cont_values, cmap=cmap, s=30, marker="o", vmin=vmin, vmax=vmax)
 
     ax.set_title(title)
     ax.set_xlabel("Time to Maturity (T)")
@@ -332,7 +314,7 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
         if vmax_diff is None:
             vmax_diff = all_diff_values.max()
 
-    cmap = cm.Spectral
+    cmap = cm.Spectral_r
 
     # Create figure and gridspec
     fig = plt.figure(figsize=(16, 12))
@@ -355,11 +337,11 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
         if difference_type != "difference" else "Differences to QuantLib"
 
     plot_differences(differences, paths, dt, ax_diff, plot_title, vmin_diff, vmax_diff,
-                     key_S_lines, plot_asset_paths, difference_type, S0, K, barrier_level, norm=norm_diff)
+                     key_S_lines, plot_asset_paths, difference_type, S0, K, barrier_level, cmap, norm=norm_diff)
 
     # Plot continuation values
     plot_continuation_values(continuation_values, paths, dt, ax_cont, "Continuation Values", vmin_cont, vmax_cont,
-                             key_S_lines, plot_asset_paths)
+                             key_S_lines, plot_asset_paths, cmap)
 
     # Plot CCR exposures
     plot_ccr_exposures(lsmc_ccr_exposures, quantlib_ccr_exposures, dt, ax_ccr)
@@ -457,10 +439,10 @@ def main(params):
     n_paths = params['n_paths']
     option_type = params['option_type']
     exercise_type = params['exercise_type']
-    n_plotted_paths = params['n_plotted_paths']
     barrier_level = params['barrier_level']
     basis_type = params['basis_type']
     degree = params['degree']
+    n_plotted_paths = params['n_plotted_paths']
     difference_type = params['difference_type']
     vmin_diff = params['vmin_diff']
     vmax_diff = params['vmax_diff']
@@ -515,7 +497,7 @@ if __name__ == "__main__":
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
         "n_time_steps": 80,  # Number of time steps (excluding S0)
-        "n_paths": 1000,  # Number of Monte Carlo paths
+        "n_paths": 100,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
