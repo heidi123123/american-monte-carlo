@@ -102,19 +102,28 @@ def get_basis_polynomials(X, basis_type, degree):
 
 
 # Regression estimate of continuation value using specified basis functions
-def regression_estimate(X, Y, basis_type="Power", degree=3):
-    A = get_basis_polynomials(X, basis_type, degree)
-    coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]
-    return A @ coeffs
+def regression_estimate(X, Y, basis_type="Power", degree=3, scaling=False, scaling_factor=2):
+    if scaling:
+        mean = np.mean(X)
+        std = max(np.std(X), 1e-6)
+        X_scaled = (X - mean) / (scaling_factor * std)
+
+        A = get_basis_polynomials(X_scaled, basis_type, degree)
+        coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]
+        return A @ coeffs
+    else:
+        A = get_basis_polynomials(X, basis_type, degree)
+        coeffs = np.linalg.lstsq(A, Y, rcond=None)[0]
+        return A @ coeffs
 
 
 # Estimate continuation values, applying regression onto asset paths
-def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, basis_type, degree):
+def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, basis_type, degree, **kwargs):
     X = paths[:, t]
     Y = cashflows * np.exp(-r * dt * (exercise_times - t))
 
     if len(X) > 0:
-        estimated_values = regression_estimate(X, Y, basis_type, degree)
+        estimated_values = regression_estimate(X, Y, basis_type, degree, **kwargs)
         continuation_estimated = np.maximum(estimated_values, 0)
     else:
         continuation_estimated = np.zeros(paths.shape[0])
@@ -123,7 +132,7 @@ def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, bas
 
 # Perform the backward iteration of American Monte Carlo procedure
 def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               exercise_type, continuation_values, basis_type, degree):
+                               exercise_type, continuation_values, basis_type, degree, **kwargs):
     for t in reversed(range(n_time_steps + 1)):
         barrier_hit_t = barrier_hit[:, t]
 
@@ -135,7 +144,7 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
             exercise_times[barrier_hit_t] = t
         else:
             continuation_estimated = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
-                                                                  basis_type, degree)
+                                                                  basis_type, degree, **kwargs)
 
             if exercise_type == 'American':
                 in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
@@ -164,7 +173,8 @@ def precompute_barrier_hit_matrix(paths, barrier_level):
 
 # Perform Least Squares Monte Carlo (LSMC) with visualization data
 def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
-                        exercise_type="European", basis_type="Chebyshev", degree=4):
+                        exercise_type="European", basis_type="Chebyshev", degree=4,
+                        **kwargs):
     # Initialize LSMC
     n_paths, n_time_steps_plus_one = paths.shape
     n_time_steps = n_time_steps_plus_one - 1
@@ -175,7 +185,7 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
 
     # Backward iteration
     perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
-                               exercise_type, continuation_values, basis_type, degree)
+                               exercise_type, continuation_values, basis_type, degree, **kwargs)
 
     # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
@@ -317,7 +327,7 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
     cmap = cm.Spectral_r
 
     # Create figure and gridspec
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(10, 7))
     gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 
     # Create axes
@@ -439,10 +449,12 @@ def main(params):
     n_paths = params['n_paths']
     option_type = params['option_type']
     exercise_type = params['exercise_type']
+    n_plotted_paths = params['n_plotted_paths']
     barrier_level = params['barrier_level']
     basis_type = params['basis_type']
     degree = params['degree']
-    n_plotted_paths = params['n_plotted_paths']
+    scaling = params['scaling']
+    scaling_factor = params['scaling_factor']
     difference_type = params['difference_type']
     vmin_diff = params['vmin_diff']
     vmax_diff = params['vmax_diff']
@@ -453,7 +465,8 @@ def main(params):
     # Perform LSMC pricing
     dt = T / n_time_steps
     lsmc_price, continuation_values = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level,
-                                                          exercise_type, basis_type, degree)
+                                                          exercise_type, basis_type, degree,
+                                                          scaling=scaling, scaling_factor=scaling_factor)
 
     # Compute QuantLib values at every grid point using all paths
     quantlib_option_values = compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type,
@@ -497,14 +510,16 @@ if __name__ == "__main__":
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
         "n_time_steps": 80,  # Number of time steps (excluding S0)
-        "n_paths": 100,  # Number of Monte Carlo paths
+        "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
         "barrier_level": 80,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
-        "degree": 4,
+        "degree": 10,
+        "scaling": True,
+        "scaling_factor": 1,
         # Plot settings
         "n_plotted_paths": 100,
         "difference_type": "difference",
