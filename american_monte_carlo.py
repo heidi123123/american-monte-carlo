@@ -308,7 +308,7 @@ def plot_continuation_values(continuation_values, paths, dt, ax, title, vmin, vm
 def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_exposures, quantlib_ccr_exposures,
                       difference_type="difference",
                       key_S_lines=None, plot_asset_paths=False, vmin_diff=None, vmax_diff=None,
-                      S0=None, K=None, barrier_level=None):
+                      S0=None, K=None, barrier_level=None, separate_figures=False):
     # Compute differences using precomputed QuantLib values
     differences = compute_differences(continuation_values, quantlib_values, difference_type)
 
@@ -326,16 +326,30 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
 
     cmap = cm.Spectral_r
 
-    # Create figure and gridspec
-    fig = plt.figure(figsize=(10, 7))
-    gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
+    if not separate_figures:
+        # Create figure and gridspec
+        fig = plt.figure(figsize=(10, 7))
+        gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 
-    # Create axes
-    ax_diff = plt.subplot(gs[0, 0])
-    ax_cont = plt.subplot(gs[0, 1], sharey=ax_diff)
-    ax_ccr = plt.subplot(gs[1, 0], sharex=ax_diff)
-    # Remove the unused subplot in bottom-right
-    fig.delaxes(plt.subplot(gs[1, 1]))
+        # Create axes
+        ax_diff = plt.subplot(gs[0, 0])
+        ax_cont = plt.subplot(gs[0, 1], sharey=ax_diff)
+        ax_ccr = plt.subplot(gs[1, 0], sharex=ax_diff)
+        # Remove the unused subplot in bottom-right
+        fig.delaxes(plt.subplot(gs[1, 1]))
+
+        fig_diff = fig
+        fig_cont = fig
+        fig_ccr = fig
+    else:
+        fig_diff = plt.figure(figsize=(10, 7))
+        ax_diff = plt.subplot()
+
+        fig_cont = plt.figure(figsize=(10, 7))
+        ax_cont = plt.subplot()
+
+        fig_ccr = plt.figure(figsize=(10, 7))
+        ax_ccr = plt.subplot()
 
     # Plot differences
     if difference_type == "relative":
@@ -358,18 +372,18 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
     # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
     sm_diff.set_array([])
-    fig.colorbar(sm_diff, ax=ax_diff, label=f"Differences to QuantLib")
+    fig_diff.colorbar(sm_diff, ax=ax_diff, label=f"Differences to QuantLib")
 
     # Add color bar for continuation values
     norm_cont = mcolors.Normalize(vmin=vmin_cont, vmax=vmax_cont)
     sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
     sm_cont.set_array([])
-    fig.colorbar(sm_cont, ax=ax_cont, label="Continuation Value")
+    fig_cont.colorbar(sm_cont, ax=ax_cont, label="Continuation Value")
 
     # Add a transparent color bar for CCR exposures to maintain alignment
     sm_empty = cm.ScalarMappable(cmap=cmap, norm=norm_cont)   # can be any norm...
     sm_empty.set_array([])
-    cbar_empty = fig.colorbar(sm_empty, ax=ax_ccr)
+    cbar_empty = fig_ccr.colorbar(sm_empty, ax=ax_ccr)
     cbar_empty.ax.set_visible(False)
 
     plt.tight_layout()
@@ -455,6 +469,7 @@ def main(params):
     difference_type = params['difference_type']
     vmin_diff = params['vmin_diff']
     vmax_diff = params['vmax_diff']
+    separate_figures = params.get('separate_figures', False)
 
     # Generate asset paths
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
@@ -483,7 +498,8 @@ def main(params):
         cont_values_cropped, paths_cropped, dt, quantlib_values_cropped,
         lsmc_ccr_exposures, quantlib_ccr_exposures,
         difference_type=difference_type, key_S_lines=key_S_lines, plot_asset_paths=False,
-        vmin_diff=vmin_diff, vmax_diff=vmax_diff, S0=S0, K=K, barrier_level=barrier_level
+        vmin_diff=vmin_diff, vmax_diff=vmax_diff, S0=S0, K=K, barrier_level=barrier_level,
+        separate_figures=separate_figures
     )
 
     # Compare LSMC with QuantLib
@@ -516,12 +532,13 @@ if __name__ == "__main__":
         "basis_type": "Chebyshev",
         "degree": 10,
         "scaling": True,
-        "scaling_factor": 1,
+        "scaling_factor": 2,
         # Plot settings
         "n_plotted_paths": 100,
         "difference_type": "difference",
         "vmin_diff": None,
-        "vmax_diff": None
+        "vmax_diff": None,
+        "separate_figures": True
     }
     np.random.seed(42)
     main(params)
