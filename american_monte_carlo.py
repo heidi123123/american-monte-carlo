@@ -352,17 +352,8 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
     # Plot continuation values
     plot_continuation_values(continuation_values, paths, dt, ax_cont, "Continuation Values", vmin_cont, vmax_cont,
                              key_S_lines, plot_asset_paths, cmap)
-
     # Plot CCR exposures
     plot_ccr_exposures(lsmc_ccr_exposures, quantlib_ccr_exposures, dt, ax_ccr)
-
-    # Remove ticks when axes are shared
-    plt.setp(ax_cont.get_yticklabels(), visible=False)
-    plt.setp(ax_diff.get_xticklabels(), visible=False)
-
-    # Share x-axis between differences and CCR exposures plots
-    ax_ccr.get_shared_x_axes().joined(ax_ccr, ax_diff)
-    # TODO: x-axis sharing does not work
 
     # Add color bar for differences
     sm_diff = cm.ScalarMappable(cmap=cmap, norm=norm_diff)
@@ -374,6 +365,12 @@ def plot_lsmc_results(continuation_values, paths, dt, quantlib_values, lsmc_ccr_
     sm_cont = cm.ScalarMappable(cmap=cmap, norm=norm_cont)
     sm_cont.set_array([])
     fig.colorbar(sm_cont, ax=ax_cont, label="Continuation Value")
+
+    # Add a transparent color bar for CCR exposures to maintain alignment
+    sm_empty = cm.ScalarMappable(cmap=cmap, norm=norm_cont)   # can be any norm...
+    sm_empty.set_array([])
+    cbar_empty = fig.colorbar(sm_empty, ax=ax_ccr)
+    cbar_empty.ax.set_visible(False)
 
     plt.tight_layout()
     plt.show()
@@ -514,7 +511,7 @@ if __name__ == "__main__":
         # Payoff settings
         "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
-        "barrier_level": 80,    # Barrier level
+        "barrier_level": 70,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
         "degree": 10,
