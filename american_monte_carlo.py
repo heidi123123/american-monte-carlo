@@ -125,6 +125,7 @@ def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, bas
     if len(X) > 0:
         estimated_values = regression_estimate(X, Y, basis_type, degree, **kwargs)
         continuation_estimated = np.maximum(estimated_values, 0)
+        # continuation_estimated = estimated_values
     else:
         continuation_estimated = np.zeros(paths.shape[0])
     return continuation_estimated
@@ -519,23 +520,24 @@ if __name__ == "__main__":
         # Underlying asset path settings
         "S0": 95,  # Initial stock price
         "K": 100,  # Strike price
-        "T": 1.0,  # Maturity in years
+        "T": 1,  # Maturity in years
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
-        "n_time_steps": 80,  # Number of time steps (excluding S0)
+        "n_time_steps": 10,  # Number of time steps (excluding S0)
         "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
         "exercise_type": "European",  # Exercise type
-        "barrier_level": 70,    # Barrier level
+        "barrier_level": 80,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
         "degree": 10,
         "scaling": True,
-        "scaling_factor": 2,
+        "scaling_factor": 1,
         # Plot settings
         "n_plotted_paths": 100,
         "difference_type": "difference",
+        # "difference_type": "relative",
         "vmin_diff": None,
         "vmax_diff": None,
         "separate_figures": True
