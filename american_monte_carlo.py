@@ -7,7 +7,8 @@ import matplotlib.gridspec as gridspec
 
 
 # Set up the QuantLib exercise and engine based on exercise type and barrier level
-def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European", barrier_level=None):
+def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European", barrier_level=None,
+                              dividend_yield=0.0):
     calendar = ql.NullCalendar()
     day_count = ql.Actual365Fixed()
     today = ql.Date().todaysDate()
@@ -16,7 +17,10 @@ def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European"
     spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
     flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(today, r, day_count))
     vol_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(today, calendar, sigma, day_count))
-    process = ql.BlackScholesProcess(spot_handle, flat_ts, vol_ts)
+    dividend_ts = ql.YieldTermStructureHandle(
+        ql.FlatForward(today, ql.QuoteHandle(ql.SimpleQuote(dividend_yield)), day_count, ql.Continuous)
+    )
+    process = ql.BlackScholesMertonProcess(spot_handle, dividend_ts, flat_ts, vol_ts)
 
     # Exercise and engine setup functions
     def european_exercise_and_engine():
@@ -50,8 +54,9 @@ def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European"
 
 
 # Generate QuantLib option for comparison
-def get_quantlib_option(S0, K, r, T, sigma, n_steps=100, option_type="Call", exercise_type="European", barrier_level=None):
-    exercise, engine = setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type, barrier_level)
+def get_quantlib_option(S0, K, r, T, sigma, n_steps=100, option_type="Call", exercise_type="European",
+                        barrier_level=None, dividend_yield=0.0):
+    exercise, engine = setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type, barrier_level, dividend_yield)
     option_type_ql = ql.Option.Put if option_type == "Put" else ql.Option.Call
     payoff = ql.PlainVanillaPayoff(option_type_ql, K)
     if barrier_level is not None:
