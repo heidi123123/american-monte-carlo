@@ -9,7 +9,7 @@ def run_lsmc_quantlib_test(S0, K, T, r, sigma, n_time_steps, n_paths, option_typ
     basis_type, degree = "Chebyshev", 4
 
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
-    lsmc_price, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type, basis_type, degree)
+    lsmc_price, _, _ = lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level, exercise_type, basis_type, degree)
     lsmc_price = round(lsmc_price, 4)
 
     quantlib_option = get_quantlib_option(S0, K, r, T, sigma, n_time_steps, option_type, exercise_type, barrier_level)
