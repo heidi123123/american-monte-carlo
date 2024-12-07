@@ -448,6 +448,62 @@ def plot_ccr_exposures(lsmc_exposures, quantlib_exposures, dt, ax):
     ax.grid(True)
 
 
+# Extracts the stock prices, continuation values, and regression coefficients for a specific time step.
+def extract_lsmc_coefficients_and_values(time_step, continuation_values, regression_coefficients):
+    stock_prices, continuation_values_at_t = None, None
+    for t, s, c in continuation_values:
+        if t == time_step:
+            stock_prices = s
+            continuation_values_at_t = c
+            break
+    coeffs = regression_coefficients.get(time_step, None)
+    return stock_prices, continuation_values_at_t, coeffs
+
+
+# Plots the regression for a specific time step
+def plot_time_slice_regression(time_steps, continuation_values, regression_coefficients, basis_type, degree, **kwargs):
+    scaling = kwargs.get('scaling', False)
+    scaling_factor = kwargs.get('scaling_factor', 2)
+
+    # Initialize subplots
+    fig, axs = plt.subplots(1, len(time_steps), figsize=(12, 6), sharey=True)
+
+    for idx, time_step in enumerate(time_steps):
+        # Extract data and coefficients for the given time step
+        X_t, Y_t, coeffs_t = extract_lsmc_coefficients_and_values(time_step, continuation_values,
+                                                                  regression_coefficients)
+
+        if X_t is None or coeffs_t is None:
+            continue
+
+        # Generate plotting points for the fitted polynomial
+        X_plot_t = np.linspace(min(X_t), max(X_t), 100)
+
+        if scaling:
+            # Apply scaling for plotting
+            mean = np.mean(X_t)
+            std = max(np.std(X_t), 1e-6)
+            X_scaled = (X_plot_t - mean) / (scaling_factor * std)
+            A_plot_t = get_basis_polynomials(X_scaled, basis_type, degree)
+        else:
+            A_plot_t = get_basis_polynomials(X_plot_t, basis_type, degree)
+
+        Y_fit_t = A_plot_t @ coeffs_t
+
+        # Plot for the given time step
+        axs[idx].scatter(X_t, Y_t, label=f"Data (t={time_step})", alpha=0.6)
+        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Polynomial (t={time_step})", color="red")
+        axs[idx].set_title(f"Time Step {time_step}")
+        axs[idx].set_xlabel("Stock Price")
+        axs[idx].set_ylabel("Continuation Value")
+        axs[idx].legend()
+        axs[idx].grid(True)
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+
 # Main function to run LSMC and plot results
 def main(params):
     # Unpack the parameters dictionary
@@ -479,6 +535,11 @@ def main(params):
         paths, K, r, dt, option_type, barrier_level, exercise_type, basis_type, degree,
         scaling=scaling, scaling_factor=scaling_factor
     )
+
+    # Plot regression at specific time steps
+    time_steps_to_plot = [10, 20, 30]  # Specify desired time steps
+    plot_time_slice_regression(time_steps_to_plot, continuation_values, regression_coeffs, basis_type, degree,
+                               scaling=scaling, scaling_factor=scaling_factor)
 
     # Compute QuantLib values at every grid point using all paths
     quantlib_option_values = compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type,
