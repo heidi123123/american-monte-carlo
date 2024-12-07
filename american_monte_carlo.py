@@ -516,12 +516,14 @@ def main(params):
     n_paths = params['n_paths']
     option_type = params['option_type']
     exercise_type = params['exercise_type']
-    n_plotted_paths = params['n_plotted_paths']
     barrier_level = params['barrier_level']
     basis_type = params['basis_type']
     degree = params['degree']
     scaling = params['scaling']
     scaling_factor = params['scaling_factor']
+    plot_polynomials = params['plot_polynomials']
+    time_steps_to_plot = params['time_steps_to_plot']
+    n_plotted_paths = params['n_plotted_paths']
     difference_type = params['difference_type']
     vmin_diff = params['vmin_diff']
     vmax_diff = params['vmax_diff']
@@ -537,9 +539,9 @@ def main(params):
     )
 
     # Plot regression at specific time steps
-    time_steps_to_plot = [10, 20, 30]  # Specify desired time steps
-    plot_time_slice_regression(time_steps_to_plot, continuation_values, regression_coeffs, basis_type, degree,
-                               scaling=scaling, scaling_factor=scaling_factor)
+    if plot_polynomials:
+        plot_time_slice_regression(time_steps_to_plot, continuation_values, regression_coeffs, basis_type, degree,
+                                   scaling=scaling, scaling_factor=scaling_factor)
 
     # Compute QuantLib values at every grid point using all paths
     quantlib_option_values = compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type,
@@ -590,10 +592,12 @@ if __name__ == "__main__":
         "barrier_level": None,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
-        "degree": 10,
+        "degree": 5,
         "scaling": True,
         "scaling_factor": 1,
         # Plot settings
+        "plot_polynomials": True,
+        "time_steps_to_plot": [10, 20, 30, 40, 49],
         "n_plotted_paths": 100,
         "difference_type": "difference",
         "vmin_diff": None,
