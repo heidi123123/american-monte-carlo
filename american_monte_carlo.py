@@ -73,23 +73,27 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps=100, option_type="Call", exe
 
 # Cache QuantLib option prices
 def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level):
-    # Create a cache key. Include all parameters that affect pricing.
-    cache_key = (S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level)
+    # Apply rounding to critical parameters
+    rounded_S = round(S, 4)
+    rounded_T_step = round(T_step, 4)
+
+    # Create a cache key
+    cache_key = (rounded_S, K, r, T, rounded_T_step, sigma, option_type, exercise_type, barrier_level)
 
     if cache_key in option_price_cache:
         return option_price_cache[cache_key]
 
     # Compute the price if not cached
-    remaining_T = T - T_step
+    remaining_T = T - rounded_T_step
     if remaining_T <= 0:
         # At or past maturity, intrinsic value applies
-        price = max(K - S, 0) if option_type == "Put" else max(S - K, 0)
+        price = max(K - rounded_S, 0) if option_type == "Put" else max(rounded_S - K, 0)
         option_price_cache[cache_key] = price
         return price
 
     try:
         ql_option = get_quantlib_option(
-            S0=S, K=K, r=r, T=remaining_T, sigma=sigma,
+            S0=rounded_S, K=K, r=r, T=remaining_T, sigma=sigma,
             n_steps=100, option_type=option_type,
             exercise_type=exercise_type, barrier_level=barrier_level
         )
@@ -97,7 +101,7 @@ def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_t
     except RuntimeError:
         # If barrier was hit or something else, fallback without barrier
         ql_option = get_quantlib_option(
-            S0=S, K=K, r=r, T=remaining_T, sigma=sigma,
+            S0=rounded_S, K=K, r=r, T=remaining_T, sigma=sigma,
             n_steps=100, option_type=option_type,
             exercise_type=exercise_type
         )
