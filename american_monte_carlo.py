@@ -6,6 +6,9 @@ import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
 
 
+option_price_cache = {}  # Global cache for option prices
+
+
 # Set up the QuantLib exercise and engine based on exercise type and barrier level
 def setup_exercise_and_engine(S0, r, T, sigma, n_steps, exercise_type="European", barrier_level=None,
                               dividend_yield=0.0):
@@ -66,6 +69,43 @@ def get_quantlib_option(S0, K, r, T, sigma, n_steps=100, option_type="Call", exe
         option = ql.VanillaOption(payoff, exercise)
     option.setPricingEngine(engine)
     return option
+
+
+# Cache QuantLib option prices
+def get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level):
+    # Create a cache key. Include all parameters that affect pricing.
+    cache_key = (S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level)
+
+    if cache_key in option_price_cache:
+        return option_price_cache[cache_key]
+
+    # Compute the price if not cached
+    remaining_T = T - T_step
+    if remaining_T <= 0:
+        # At or past maturity, intrinsic value applies
+        price = max(K - S, 0) if option_type == "Put" else max(S - K, 0)
+        option_price_cache[cache_key] = price
+        return price
+
+    try:
+        ql_option = get_quantlib_option(
+            S0=S, K=K, r=r, T=remaining_T, sigma=sigma,
+            n_steps=100, option_type=option_type,
+            exercise_type=exercise_type, barrier_level=barrier_level
+        )
+        price = ql_option.NPV()
+    except RuntimeError:
+        # If barrier was hit or something else, fallback without barrier
+        ql_option = get_quantlib_option(
+            S0=S, K=K, r=r, T=remaining_T, sigma=sigma,
+            n_steps=100, option_type=option_type,
+            exercise_type=exercise_type
+        )
+        price = ql_option.NPV()
+
+    # Store in cache
+    option_price_cache[cache_key] = price
+    return price
 
 
 # Generate Monte Carlo asset price paths using GBM
@@ -399,7 +439,9 @@ def compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type
         stock_prices = paths[:, t]
         ql_prices = np.zeros(n_paths)
         for i, S in enumerate(stock_prices):
-            ql_price = get_quantlib_option_price_for_grid_point(S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level)
+            ql_price = get_quantlib_option_price_for_grid_point(
+                S, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level
+            )
             ql_prices[i] = ql_price
         quantlib_values.append((t, stock_prices.copy(), ql_prices.copy()))
     return quantlib_values
@@ -577,6 +619,8 @@ def main(params):
 
 
 if __name__ == "__main__":
+    import time
+    start_time = time.time()
     params = {
         # Underlying asset path settings
         "S0": 95,  # Initial stock price
@@ -584,19 +628,19 @@ if __name__ == "__main__":
         "T": 1.0,  # Maturity in years
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
-        "n_time_steps": 50,  # Number of time steps (excluding S0)
-        "n_paths": 1000,  # Number of Monte Carlo paths
+        "n_time_steps": 100,  # Number of time steps (excluding S0)
+        "n_paths": 5000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
-        "exercise_type": "American",  # Exercise type
-        "barrier_level": None,    # Barrier level
+        "exercise_type": "European",  # Exercise type
+        "barrier_level": 70,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
-        "degree": 5,
+        "degree": 10,
         "scaling": True,
         "scaling_factor": 1,
         # Plot settings
-        "plot_polynomials": True,
+        "plot_polynomials": False,
         "time_steps_to_plot": [10, 20, 30, 40, 49],
         "n_plotted_paths": 100,
         "difference_type": "difference",
@@ -605,3 +649,4 @@ if __name__ == "__main__":
     }
     np.random.seed(42)
     main(params)
+    print(f"Elapsed time: {(time.time() - start_time):.4f} secs")
