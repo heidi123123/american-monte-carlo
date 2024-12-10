@@ -561,15 +561,15 @@ def plot_time_slice_regression(time_steps, regression_coefficients, regression_d
 
         Y_fit_t = A_plot_t @ coeffs_t
 
-        # Plot the regression data (X_t, Y_t) and the fitted polynomial
+        # Plot the regression data (X_t, Y_t)
         axs[idx].scatter(X_t, Y_t, label=f"Data", alpha=0.3, marker=".")
-        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Poly", color="red", linestyle="--", linewidth=2)
-
         # Plot QuantLib line
         ql_prices = get_ql_prices_for_time_slice(
             time_step, dt, X_plot_t, K, r, T, sigma, option_type, exercise_type, barrier_level
         )
-        axs[idx].plot(X_plot_t, ql_prices, label="QuantLib", color="green", linestyle="-", linewidth=2)
+        axs[idx].plot(X_plot_t, ql_prices, label="QuantLib", color="black", linestyle="-", linewidth=3)
+        # PLot fitted polynomial
+        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Poly", color="red", linestyle="--", linewidth=2)
 
         axs[idx].set_title(f"TimeStep {time_step}/{n_time_steps}")
         axs[idx].set_xlabel("Stock Price")
@@ -670,8 +670,8 @@ if __name__ == "__main__":
         "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
-        "exercise_type": "European",  # Exercise type
-        "barrier_level": 70,    # Barrier level
+        "exercise_type": "American",  # Exercise type
+        "barrier_level": None,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
         "degree": 5,
