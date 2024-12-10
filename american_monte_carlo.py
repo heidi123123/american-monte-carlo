@@ -517,16 +517,25 @@ def extract_lsmc_coefficients_and_values(time_step, continuation_values, regress
     return stock_prices, continuation_values_at_t, coeffs
 
 
-# Plots the regression for a specific time step
-def plot_time_slice_regression(time_steps, regression_coefficients, regression_data, basis_type, degree, **kwargs):
-    scaling = kwargs.get('scaling', False)
-    scaling_factor = kwargs.get('scaling_factor', 2)
+# Compute QuantLib prices for the same time slice and X_plot_t grid
+def get_ql_prices_for_time_slice(time_step, dt, X_plot_t, K, r, T, sigma, option_type, exercise_type, barrier_level):
+    T_step = time_step * dt
+    ql_prices = []
+    for S_point in X_plot_t:
+        ql_price = get_quantlib_option_price_for_grid_point(
+            S_point, K, r, T, T_step, sigma, option_type, exercise_type, barrier_level
+        )
+        ql_prices.append(ql_price)
+    return ql_prices
 
-    # Initialize subplots
+
+# Plots the regression for a specific time step
+def plot_time_slice_regression(time_steps, regression_coefficients, regression_data, basis_type, degree, n_time_steps,
+                               K, r, T, sigma, option_type, exercise_type, barrier_level, dt,
+                               scaling=False, scaling_factor=2):
     fig, axs = plt.subplots(1, len(time_steps), figsize=(12, 6), sharey=True)
 
     for idx, time_step in enumerate(time_steps):
-        # Get stored regression data and coefficients for this time step
         coeffs_t = regression_coefficients.get(time_step, None)
         if coeffs_t is None:
             continue
@@ -553,15 +562,21 @@ def plot_time_slice_regression(time_steps, regression_coefficients, regression_d
         Y_fit_t = A_plot_t @ coeffs_t
 
         # Plot the regression data (X_t, Y_t) and the fitted polynomial
-        axs[idx].scatter(X_t, Y_t, label=f"Data", alpha=0.5, marker=".")
-        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Poly", color="red")
-        axs[idx].set_title(f"Time Step {time_step}\n(deg={degree}, scaled={scaling})")
+        axs[idx].scatter(X_t, Y_t, label=f"Data", alpha=0.3, marker=".")
+        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Poly", color="red", linestyle="--", linewidth=2)
+
+        # Plot QuantLib line
+        ql_prices = get_ql_prices_for_time_slice(
+            time_step, dt, X_plot_t, K, r, T, sigma, option_type, exercise_type, barrier_level
+        )
+        axs[idx].plot(X_plot_t, ql_prices, label="QuantLib", color="green", linestyle="-", linewidth=2)
+
+        axs[idx].set_title(f"TimeStep {time_step}/{n_time_steps}")
         axs[idx].set_xlabel("Stock Price")
-        axs[idx].set_ylabel("Estimated Continuation Value")
         axs[idx].legend()
         axs[idx].grid(True)
 
-    # Adjust layout
+    fig.suptitle(f"Estimated Option Value per TimeStep.\nDegree={degree}, Scaled={scaling}")
     plt.tight_layout()
     plt.show()
 
@@ -602,8 +617,11 @@ def main(params):
 
     # Plot regression at specific time steps
     if plot_polynomials:
-        plot_time_slice_regression(time_steps_to_plot, regression_coeffs, regression_data, basis_type, degree,
-                                   scaling=scaling, scaling_factor=scaling_factor)
+        plot_time_slice_regression(
+            time_steps_to_plot, regression_coeffs, regression_data, basis_type, degree, n_time_steps,
+            K=K, r=r, T=T, sigma=sigma, option_type=option_type, exercise_type=exercise_type,
+            barrier_level=barrier_level, dt=dt, scaling=scaling, scaling_factor=scaling_factor
+        )
 
     # Compute QuantLib values at every grid point using all paths
     quantlib_option_values = compute_quantlib_values(paths, dt, K, r, T, sigma, n_time_steps, option_type,
@@ -652,11 +670,11 @@ if __name__ == "__main__":
         "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
-        "exercise_type": "American",  # Exercise type
-        "barrier_level": None,    # Barrier level
+        "exercise_type": "European",  # Exercise type
+        "barrier_level": 70,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
-        "degree": 10,
+        "degree": 5,
         "scaling": True,
         "scaling_factor": 1,
         # Plot settings
