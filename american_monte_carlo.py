@@ -167,7 +167,8 @@ def regression_estimate(X, Y, basis_type="Power", degree=3, scaling=False, scali
     return fitted_values, coeffs
 
 
-# Estimate continuation values, applying regression onto asset paths
+# Estimate continuation values, applying regression onto asset paths.
+# Returns the original X, Y along with the fitted continuation values and coeffs for plotting purpose.
 def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, basis_type, degree, **kwargs):
     X = paths[:, t]
     Y = cashflows * np.exp(-r * dt * (exercise_times - t))
@@ -179,13 +180,14 @@ def estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times, bas
         continuation_estimated = np.zeros(paths.shape[0])
         coeffs = None  # No regression performed if no paths
 
-    return continuation_estimated, coeffs
+    return continuation_estimated, coeffs, X, Y
 
 
 # Perform the backward iteration of American Monte Carlo procedure
 def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times,
                                exercise_type, continuation_values, basis_type, degree, **kwargs):
     regression_coefficients = {}
+    regression_data = {}  # Store (X, Y) for plotting
 
     for t in reversed(range(n_time_steps + 1)):
         barrier_hit_t = barrier_hit[:, t]
@@ -193,14 +195,16 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
         if t == n_time_steps:  # At maturity
             cashflows[barrier_hit_t] = intrinsic_value(paths[barrier_hit_t, t], K, option_type)
             exercise_times[barrier_hit_t] = t
-            # No regression at maturity
             continuation_estimated = np.zeros(paths.shape[0])
+            # No regression at maturity
             coeffs = None
+            regression_data[t] = ([], [])
         else:
-            continuation_estimated, coeffs = estimate_continuation_values(paths, t, r, dt, cashflows, exercise_times,
-                                                                          basis_type, degree, **kwargs)
+            continuation_estimated, coeffs, X_reg, Y_reg = estimate_continuation_values(
+                paths, t, r, dt, cashflows, exercise_times, basis_type, degree, **kwargs
+            )
 
-            if exercise_type == 'American':
+            if exercise_type == 'American':  # check for early exercise at every time step
                 in_the_money = intrinsic_value(paths[:, t], K, option_type) > 0
                 valid_paths = barrier_hit_t & in_the_money
                 valid_paths_indices = np.where(valid_paths)[0]
@@ -210,13 +214,19 @@ def perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, p
                 apply_exercise(cashflows, exercise_times, valid_paths_indices, exercise_value,
                                estimated_continuation, t)
 
+            # Store regression data (only for valid/in-the-money paths)
+            # Filter X_reg and Y_reg by the same condition used for regression (in_the_money & barrier_hit_t)
+            # The regression is performed on all paths here, but if you only regress on in-the-money paths,
+            # filter accordingly. Assuming the code uses all valid paths in estimate_continuation_values:
+            regression_data[t] = (X_reg, Y_reg)
+
         continuation_values.append((t, paths[:, t].copy(), continuation_estimated.copy()))
         if coeffs is not None:
             regression_coefficients[t] = coeffs
 
     # Reverse the stored values for correct time ordering
     continuation_values.reverse()
-    return regression_coefficients
+    return regression_coefficients, regression_data
 
 
 # Precompute barrier hit matrix
@@ -241,13 +251,14 @@ def lsmc_option_pricing(paths, K, r, dt, option_type, barrier_level=None,
     barrier_hit = precompute_barrier_hit_matrix(paths, barrier_level)
 
     # Backward iteration
-    regression_coefficients = perform_backward_iteration(K, r, dt, n_time_steps, barrier_hit, cashflows, paths,
-                                                         option_type, exercise_times,
-                                                         exercise_type, continuation_values, basis_type, degree, **kwargs)
+    regression_coefficients, regression_data = perform_backward_iteration(
+        K, r, dt, n_time_steps, barrier_hit, cashflows, paths, option_type, exercise_times, exercise_type,
+        continuation_values, basis_type, degree, **kwargs
+    )
 
     # Calculate the discounted option price
     option_price = np.mean(cashflows * np.exp(-r * dt * exercise_times))
-    return option_price, continuation_values, regression_coefficients
+    return option_price, continuation_values, regression_coefficients, regression_data
 
 
 # Crop continuation_values to the first n_plotted_paths for plotting
@@ -507,7 +518,7 @@ def extract_lsmc_coefficients_and_values(time_step, continuation_values, regress
 
 
 # Plots the regression for a specific time step
-def plot_time_slice_regression(time_steps, continuation_values, regression_coefficients, basis_type, degree, **kwargs):
+def plot_time_slice_regression(time_steps, regression_coefficients, regression_data, basis_type, degree, **kwargs):
     scaling = kwargs.get('scaling', False)
     scaling_factor = kwargs.get('scaling_factor', 2)
 
@@ -515,12 +526,17 @@ def plot_time_slice_regression(time_steps, continuation_values, regression_coeff
     fig, axs = plt.subplots(1, len(time_steps), figsize=(12, 6), sharey=True)
 
     for idx, time_step in enumerate(time_steps):
-        # Extract data and coefficients for the given time step
-        X_t, Y_t, coeffs_t = extract_lsmc_coefficients_and_values(time_step, continuation_values,
-                                                                  regression_coefficients)
-
-        if X_t is None or coeffs_t is None:
+        # Get stored regression data and coefficients for this time step
+        coeffs_t = regression_coefficients.get(time_step, None)
+        if coeffs_t is None:
             continue
+
+        X_t, Y_t = regression_data.get(time_step, (None, None))
+        if X_t is None or len(X_t) == 0:
+            continue
+
+        X_t = np.array(X_t)
+        Y_t = np.array(Y_t)
 
         # Generate plotting points for the fitted polynomial
         X_plot_t = np.linspace(min(X_t), max(X_t), 100)
@@ -536,12 +552,12 @@ def plot_time_slice_regression(time_steps, continuation_values, regression_coeff
 
         Y_fit_t = A_plot_t @ coeffs_t
 
-        # Plot for the given time step
-        axs[idx].scatter(X_t, Y_t, label=f"Data (t={time_step})", alpha=0.6)
-        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Polynomial (t={time_step})", color="red")
-        axs[idx].set_title(f"Time Step {time_step}")
+        # Plot the regression data (X_t, Y_t) and the fitted polynomial
+        axs[idx].scatter(X_t, Y_t, label=f"Data", alpha=0.5, marker=".")
+        axs[idx].plot(X_plot_t, Y_fit_t, label=f"Fitted Poly", color="red")
+        axs[idx].set_title(f"Time Step {time_step}\n(deg={degree}, scaled={scaling})")
         axs[idx].set_xlabel("Stock Price")
-        axs[idx].set_ylabel("Continuation Value")
+        axs[idx].set_ylabel("Estimated Continuation Value")
         axs[idx].legend()
         axs[idx].grid(True)
 
@@ -579,14 +595,14 @@ def main(params):
 
     # Perform LSMC pricing
     dt = T / n_time_steps
-    lsmc_price, continuation_values, regression_coeffs = lsmc_option_pricing(
+    lsmc_price, continuation_values, regression_coeffs, regression_data = lsmc_option_pricing(
         paths, K, r, dt, option_type, barrier_level, exercise_type, basis_type, degree,
         scaling=scaling, scaling_factor=scaling_factor
     )
 
     # Plot regression at specific time steps
     if plot_polynomials:
-        plot_time_slice_regression(time_steps_to_plot, continuation_values, regression_coeffs, basis_type, degree,
+        plot_time_slice_regression(time_steps_to_plot, regression_coeffs, regression_data, basis_type, degree,
                                    scaling=scaling, scaling_factor=scaling_factor)
 
     # Compute QuantLib values at every grid point using all paths
@@ -633,19 +649,19 @@ if __name__ == "__main__":
         "r": 0.01,  # Risk-free rate
         "sigma": 0.2,  # Volatility of the underlying stock
         "n_time_steps": 100,  # Number of time steps (excluding S0)
-        "n_paths": 5000,  # Number of Monte Carlo paths
+        "n_paths": 1000,  # Number of Monte Carlo paths
         # Payoff settings
         "option_type": "Put",  # Option type
-        "exercise_type": "European",  # Exercise type
-        "barrier_level": 70,    # Barrier level
+        "exercise_type": "American",  # Exercise type
+        "barrier_level": None,    # Barrier level
         # Regression settings
         "basis_type": "Chebyshev",
         "degree": 10,
         "scaling": True,
         "scaling_factor": 1,
         # Plot settings
-        "plot_polynomials": False,
-        "time_steps_to_plot": [10, 20, 30, 40, 49],
+        "plot_polynomials": True,
+        "time_steps_to_plot": [10, 30, 50, 70, 90, 99],
         "n_plotted_paths": 100,
         "difference_type": "difference",
         "vmin_diff": None,
