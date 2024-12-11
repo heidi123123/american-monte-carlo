@@ -601,9 +601,9 @@ def main(params):
     plot_polynomials = params['plot_polynomials']
     time_steps_to_plot = params['time_steps_to_plot']
     n_plotted_paths = params['n_plotted_paths']
-    difference_type = params['difference_type']
-    vmin_diff = params['vmin_diff']
-    vmax_diff = params['vmax_diff']
+    difference_type = params.get("difference_type", "difference")
+    vmin_diff = params.get("vmin_diff", None)
+    vmax_diff = params.get("vmax_diff", None)
 
     # Generate asset paths
     paths = generate_asset_paths(S0, r, sigma, T, n_time_steps, n_paths)
@@ -680,10 +680,7 @@ if __name__ == "__main__":
         # Plot settings
         "plot_polynomials": True,
         "time_steps_to_plot": [10, 30, 50, 70, 90, 99],
-        "n_plotted_paths": 100,
-        "difference_type": "difference",
-        "vmin_diff": None,
-        "vmax_diff": None
+        "n_plotted_paths": 100
     }
     np.random.seed(42)
     main(params)
